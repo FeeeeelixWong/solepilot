@@ -1,7 +1,7 @@
 # SolePilot
 
-SolePilot is a governed agent runtime for one-person companies. An AI planner
-turns an owner objective into tool calls; a deterministic policy engine then
+SolePilot is a governed agent runtime for one-person companies. A reliable
+server planner turns an owner objective into tool calls; a deterministic policy engine then
 allows, pauses, or blocks every call before it reaches an execution adapter.
 
 **Online product:** https://solepilot.vercel.app
@@ -30,9 +30,9 @@ The public demo offers two runtime modes:
 
 - **Replay** is a deterministic, zero-configuration run. It requires no account
   or API key and exercises `ALLOW`, `REVIEW`, and `BLOCK` paths.
-- **Online agent** asks a Puter-hosted OpenAI model to generate a typed plan,
-  retrieves current external evidence through server-side research adapters,
-  produces a scoped artifact, and pauses before a real Telegram delivery.
+- **Online agent** generates a typed plan through a no-login same-origin server
+  endpoint, retrieves current external evidence through server-side research
+  adapters, produces an evidence-backed artifact, and pauses before a real Telegram delivery.
   Delivery requires the owner's connector code and returns a real
   provider message ID.
 
@@ -58,7 +58,7 @@ to the planner.
 
 ```mermaid
 flowchart LR
-  O[Owner objective] --> P[Replay or Live AI planner]
+  O[Owner objective] --> P[Replay or server planner]
   P --> V[Schema normalization]
   V --> G[Deterministic policy gate]
   G -->|ALLOW| T[Governed tool adapter]
@@ -82,7 +82,7 @@ and the production replacement plan.
 ## What is implemented
 
 - Custom mission composition with configurable stakeholder, deadline, and cap
-- Keyless Live AI planner through Puter.js
+- No-login same-origin server planner with a deterministic local fallback
 - Server-side online research using Wikipedia and Hacker News
 - Real owner-approved Telegram delivery through a fixed-destination connector
 - Provider request IDs, evidence URLs, message IDs, and HMAC attestations
@@ -115,6 +115,8 @@ The test suite covers:
 - canonical serialization
 - deterministic receipt IDs
 - model-plan normalization
+- no-login online plan generation
+- evidence-backed drafting without an external model session
 - direct tool-adapter bypass attempts
 - approved sandbox execution
 - receipt-chain tamper detection
@@ -127,7 +129,8 @@ npm run dev
 ```
 
 Open http://localhost:3000. Replay mode works offline after the application has
-loaded. Online Agent requires network access to Puter.js and the research APIs.
+loaded. Online Agent requires network access to the same-origin planning and
+research APIs, but no third-party account or model login.
 
 To enable real Telegram delivery, copy `.env.example` to `.env.local` and set:
 

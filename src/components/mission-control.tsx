@@ -437,7 +437,7 @@ export function MissionControl() {
     mode: PlannerMode,
     signal: AbortSignal,
   ) {
-    const nextMission = await planMission(draft, mode);
+    const nextMission = await planMission(draft, mode, undefined, signal);
     if (signal.aborted) return;
     const nextStatuses = statusesFor(nextMission);
     const event = newEvent(
@@ -1022,7 +1022,7 @@ function MissionComposer({ initialDraft, initialMode, onClose, onCreate }: {
               <FileJson size={17} /><span><strong>Replay</strong><small>Zero-config reference run</small></span>
             </button>
             <button data-active={mode === "live-ai"} onClick={() => setMode("live-ai")} type="button">
-              <BrainCircuit size={17} /><span><strong>Online agent</strong><small>Live research, AI work, governed delivery</small></span>
+              <BrainCircuit size={17} /><span><strong>Online agent</strong><small>Server planning, live research, governed delivery</small></span>
             </button>
           </fieldset>
 
@@ -1032,7 +1032,7 @@ function MissionComposer({ initialDraft, initialMode, onClose, onCreate }: {
             <button className="button secondary" onClick={close} type="button">Cancel</button>
             <button className="button primary create-plan" disabled={isPlanning} type="submit">
               {isPlanning ? <Clock3 size={16} /> : mode === "live-ai" ? <Sparkles size={16} /> : <Play size={16} />}
-              {isPlanning ? "Planning" : mode === "live-ai" ? "Launch online agent" : "Create replay plan"}
+              {isPlanning ? "Planning on server" : mode === "live-ai" ? "Launch online agent" : "Create replay plan"}
             </button>
           </footer>
         </form>

@@ -79,6 +79,7 @@ export function sendTelegramDelivery(
 
 export interface RuntimeHealth {
   online: boolean;
+  planner: boolean;
   research: boolean;
   telegram: boolean;
   attestation: boolean;

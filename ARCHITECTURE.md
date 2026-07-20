@@ -15,7 +15,7 @@ of model and browser contexts.
 ## Execution sequence
 
 1. The owner supplies an objective, stakeholder, deadline, and budget cap.
-2. Replay or Live AI returns a typed `AgentAction[]` plan.
+2. Replay or the same-origin server planner returns a typed `AgentAction[]` plan.
 3. The normalizer accepts only known action kinds and maps each kind to an
    allow-listed tool.
 4. `evaluateAction` returns `allow`, `review`, or `block` with matched policy IDs.
@@ -44,7 +44,7 @@ of model and browser contexts.
 - Receipt-chain verifier
 - Server-side fixed-destination connector and result attestation boundary
 
-The Live AI provider cannot choose a tool outside the allow-list and cannot
+An optional AI provider cannot choose a tool outside the allow-list and cannot
 override a policy result. Owner approval can release `review` actions but cannot
 override `block` actions.
 
@@ -72,6 +72,11 @@ must still be used before trusting restored data.
 
 ## Online connector boundary
 
+`POST /api/plans` validates bounded mission input and returns a typed online
+plan from the reliable server planner. It requires no browser popup, external
+account, or model credential. An optional model planner can still be injected
+behind the same normalizer without changing policy semantics.
+
 `POST /api/tools/research` accepts bounded mission context, queries allow-listed
 public sources, labels returned text as untrusted evidence, and returns source
 URLs plus a signed execution result. The browser verifies that result through
@@ -90,7 +95,7 @@ replace adapters without changing policy semantics:
 | Reference component | Production replacement |
 | --- | --- |
 | Browser local storage | Encrypted workspace database with tenant isolation |
-| Puter user session | Organization-managed model gateway |
+| Reliable server planner | Organization-managed model gateway with schema-constrained output |
 | Fixed Telegram outbox | Email/CRM connectors with per-tenant scoped OAuth |
 | Sandbox reservation | Payment provider with per-transaction authorization |
 | Browser owner approval | Passkey-signed approval capability |
@@ -107,6 +112,7 @@ general-purpose credential from the model context.
   approvals are not yet passkey-signed.
 - Telegram is a fixed-destination proof connector, not a multi-tenant outbox.
 - Spending is deliberately non-custodial and does not move funds.
-- Live AI availability depends on the user's Puter session and provider quota.
+- The default planner and evidence-backed draft are deterministic; model-driven
+  synthesis is an optional production adapter rather than a demo dependency.
 
 These are explicit deployment boundaries, not hidden simulated behavior.

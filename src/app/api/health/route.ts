@@ -8,6 +8,7 @@ export function GET() {
   return NextResponse.json(
     {
       online: true,
+      planner: true,
       research: true,
       telegram: Boolean(
         process.env.TELEGRAM_BOT_TOKEN &&

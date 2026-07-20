@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { demoMission } from "./demo";
 import { evaluateAction } from "./policy";
-import { planMission } from "./planner";
+import { createOnlinePlan, planMission } from "./planner";
 import { canonicalize, createReceipt, verifyReceiptChain } from "./receipt";
 import { executeGovernedAction, GovernanceError } from "./tools";
 
@@ -85,6 +85,57 @@ test("live planner normalizes model JSON into governed tool calls", async () => 
   assert.equal(mission.executionMode, "online");
   assert.equal(mission.actions[0].toolName, "web.search");
   assert.equal(mission.actions[2].toolName, "outbox.send");
+});
+
+test("server planner creates a complete online plan without browser authentication", () => {
+  const mission = createOnlinePlan({
+    objective: "Research a market and deliver a governed brief",
+    customer: "Owner",
+    source: "Agent infrastructure",
+    deadline: "2026-08-01",
+    budgetCapUsd: 50,
+  });
+
+  assert.equal(mission.executionMode, "online");
+  assert.equal(mission.plannerModel, "SolePilot server planner v2");
+  assert.equal(mission.actions[0].toolName, "web.search");
+  assert.ok(mission.actions.some((action) => action.toolName === "outbox.send"));
+  assert.ok(mission.actions.some((action) => (action.amountUsd ?? 0) > 50));
+});
+
+test("online draft has a deterministic evidence-backed fallback", async () => {
+  const mission = createOnlinePlan({
+    objective: "Prepare a market brief",
+    customer: "Owner",
+    source: "Agent infrastructure",
+    deadline: "2026-08-01",
+    budgetCapUsd: 50,
+  });
+  const action = mission.actions.find((candidate) => candidate.kind === "draft");
+  assert.ok(action);
+
+  const { artifact } = await executeGovernedAction({
+    action,
+    mission,
+    mode: "live-ai",
+    policies: [],
+    previousArtifacts: [{
+      id: "artifact_evidence",
+      missionId: mission.id,
+      actionId: mission.actions[0].id,
+      toolName: "web.search",
+      provider: "online-research",
+      title: "Live research",
+      summary: "Retrieved current market evidence.",
+      content: "Evidence content",
+      evidence: [{ title: "Primary source", url: "https://example.com/source", source: "Test" }],
+      createdAt: "2026-07-20T00:00:00.000Z",
+    }],
+  });
+
+  assert.equal(artifact.provider, "deterministic");
+  assert.match(artifact.content, /Retrieved current market evidence/);
+  assert.match(artifact.content, /https:\/\/example.com\/source/);
 });
 
 test("tool adapter refuses a reviewed action without owner authorization", async () => {

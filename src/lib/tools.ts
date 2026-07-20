@@ -1,5 +1,5 @@
 import { canonicalize, sha256 } from "./receipt";
-import { puterChat, type ChatCompletion } from "./planner";
+import type { ChatCompletion } from "./planner";
 import { evaluateAction } from "./policy";
 import { runOnlineResearch, sendTelegramDelivery } from "./online";
 import type {
@@ -17,7 +17,15 @@ function deterministicContent(
   mission: Mission,
   previousArtifacts: ToolArtifact[],
 ): { summary: string; content: string; provider: ToolArtifact["provider"] } {
-  const evidence = previousArtifacts.map((artifact) => artifact.summary).join(" ");
+  const evidence = previousArtifacts
+    .map((artifact) => `${artifact.title}: ${artifact.summary}`)
+    .join("\n")
+    .slice(0, 4_000);
+  const evidenceLinks = previousArtifacts
+    .flatMap((artifact) => artifact.evidence ?? [])
+    .map((item) => `- ${item.title}: ${item.url}`)
+    .slice(0, 8)
+    .join("\n");
 
   switch (action.toolName) {
     case "workspace.search":
@@ -40,10 +48,16 @@ function deterministicContent(
         content: [
           `Execution brief: ${mission.title}`,
           `Objective: ${mission.objective}`,
-          `Evidence: ${evidence || "No prior artifact."}`,
+          `Stakeholder: ${mission.customer}`,
+          `Deadline: ${mission.deadline}`,
+          "",
+          "Evidence findings:",
+          evidence || "No prior artifact.",
+          evidenceLinks ? `\nSource links:\n${evidenceLinks}` : "",
+          "",
           "Acceptance: deliver a reviewable result, preserve owner approval, and record every action.",
           "Exclusions: no live payment, binding commitment, or external delivery without approval.",
-        ].join("\n"),
+        ].filter(Boolean).join("\n"),
       };
     case "outbox.send":
       return {
@@ -135,7 +149,7 @@ async function executeTool(
   mode: PlannerMode,
   previousArtifacts: ToolArtifact[],
   ownerCode: string,
-  complete: ChatCompletion = puterChat,
+  complete?: ChatCompletion,
 ): Promise<ToolArtifact> {
   if (mission.executionMode === "online" && action.toolName === "web.search") {
     return onlineArtifact(action, mission, await runOnlineResearch(action, mission));
@@ -148,7 +162,7 @@ async function executeTool(
     );
   }
 
-  const result = mode === "live-ai"
+  const result = mode === "live-ai" && complete
     ? await aiContent(action, mission, previousArtifacts, complete)
     : deterministicContent(action, mission, previousArtifacts);
   const fingerprint = await sha256(
@@ -191,7 +205,7 @@ export async function executeGovernedAction({
   previousArtifacts,
   authorization = "delegated",
   ownerCode = "",
-  complete = puterChat,
+  complete,
 }: {
   action: AgentAction;
   mission: Mission;

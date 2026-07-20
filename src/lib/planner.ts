@@ -113,6 +113,55 @@ export function createReplayPlan(draft: MissionDraft): Mission {
   };
 }
 
+export function createOnlinePlan(draft: MissionDraft): Mission {
+  const safeBudget = Math.max(1, Number(draft.budgetCapUsd) || 100);
+
+  return {
+    id: missionId(),
+    title: titleFromObjective(draft.objective),
+    ...draft,
+    budgetCapUsd: safeBudget,
+    status: "ready",
+    planSource: "live-ai",
+    executionMode: "online",
+    plannerModel: "SolePilot server planner v2",
+    actions: [
+      makeAction(0, "research", "online", {
+        agent: "Scout",
+        title: `Research ${draft.source}`,
+        description: `Collect live evidence relevant to ${draft.objective} for ${draft.customer}.`,
+      }),
+      makeAction(1, "draft", "online", {
+        agent: "Planner",
+        title: "Synthesize an execution brief",
+        description:
+          "Turn the retrieved evidence into a bounded brief with findings, acceptance criteria, and exclusions.",
+      }),
+      makeAction(2, "external-send", "online", {
+        agent: "Closer",
+        title: "Deliver the approved brief",
+        description:
+          "Release the final artifact through the fixed-destination Telegram connector after owner approval.",
+        destination: "Owner Telegram delivery channel",
+      }),
+      makeAction(3, "spend", "online", {
+        agent: "Operator",
+        title: "Reserve execution tools",
+        description: "Request an in-policy sandbox reservation for follow-up execution tools.",
+        amountUsd: Math.max(1, Math.round(safeBudget * 0.4)),
+        destination: "Tooling sandbox",
+      }),
+      makeAction(4, "spend", "online", {
+        agent: "Operator",
+        title: "Attempt an out-of-policy expansion",
+        description: "Test fail-closed enforcement with a reservation above delegated authority.",
+        amountUsd: Math.max(2, Math.round(safeBudget * 1.8)),
+        destination: "Enterprise vendor sandbox",
+      }),
+    ],
+  };
+}
+
 function extractJson(raw: string): unknown {
   const firstBrace = raw.indexOf("{");
   const lastBrace = raw.lastIndexOf("}");
@@ -284,9 +333,48 @@ function loadPuter(): Promise<void> {
 export async function planMission(
   draft: MissionDraft,
   mode: PlannerMode,
-  complete: ChatCompletion = puterChat,
+  complete?: ChatCompletion,
+  signal?: AbortSignal,
 ): Promise<Mission> {
   if (mode === "replay") return createReplayPlan(draft);
-  const raw = await complete(buildPlannerPrompt(draft));
-  return normalizePlan(extractJson(raw), draft);
+  if (complete) {
+    const raw = await complete(buildPlannerPrompt(draft));
+    return normalizePlan(extractJson(raw), draft);
+  }
+
+  const controller = new AbortController();
+  const forwardAbort = () => controller.abort();
+  signal?.addEventListener("abort", forwardAbort, { once: true });
+  const timeoutId = setTimeout(() => controller.abort(), 10_000);
+
+  try {
+    const response = await fetch("/api/plans", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(draft),
+      cache: "no-store",
+      signal: controller.signal,
+    });
+    const payload = await response.json().catch(() => null) as
+      | Mission
+      | { error?: string }
+      | null;
+    if (!response.ok || !payload || !("actions" in payload)) {
+      throw new Error(
+        payload && "error" in payload && payload.error
+          ? payload.error
+          : "The server planner could not create this mission.",
+      );
+    }
+    return payload;
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    return {
+      ...createOnlinePlan(draft),
+      plannerModel: "SolePilot resilient planner v2",
+    };
+  } finally {
+    clearTimeout(timeoutId);
+    signal?.removeEventListener("abort", forwardAbort);
+  }
 }
