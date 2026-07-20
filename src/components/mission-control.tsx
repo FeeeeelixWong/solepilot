@@ -246,11 +246,35 @@ export function MissionControl() {
     );
   }
 
-  async function runMission() {
-    if (isRunning || waitingAction || missionIsComplete) return;
+  async function runMission(
+    initialStatuses: Record<string, RuntimeStatus> = statuses,
+    resumeAfterApproval = false,
+  ) {
+    const hasWaitingAction = mission.actions.some(
+      (action) => initialStatuses[action.id] === "awaiting-owner",
+    );
+    const initialCompletedCount = Object.values(initialStatuses).filter(
+      (status) => status === "complete" || status === "blocked",
+    ).length;
+    const initialMissionIsComplete =
+      mission.actions.length > 0 && initialCompletedCount === mission.actions.length;
+
+    if ((!resumeAfterApproval && isRunning) || hasWaitingAction) return;
+    if (initialMissionIsComplete) {
+      setAnnouncement("Mission complete. Every proposed action has a governed outcome.");
+      appendEvent(
+        newEvent(
+          "MISSION COMPLETE",
+          "The runtime reached a terminal outcome for every action.",
+          "success",
+        ),
+      );
+      setIsRunning(false);
+      return;
+    }
 
     setIsRunning(true);
-    const localStatuses = { ...statuses };
+    const localStatuses = { ...initialStatuses };
 
     for (const action of mission.actions) {
       if (localStatuses[action.id] !== "pending") continue;
@@ -394,9 +418,16 @@ export function MissionControl() {
         ownerCode,
       });
       commitArtifact(artifact);
-      setStatuses((current) => ({ ...current, [actionId]: "complete" }));
+      const nextStatuses: Record<string, RuntimeStatus> = {
+        ...statuses,
+        [actionId]: "complete",
+      };
+      setStatuses(nextStatuses);
       await issueReceipt(action, "approved", artifact);
-      setAnnouncement(`${action.title} was approved and executed. Continue when ready.`);
+      setAnnouncement(`${action.title} was approved and executed. Continuing automatically.`);
+      await delay(180);
+      await runMission(nextStatuses, true);
+      return;
     } catch (error) {
       const message = error instanceof Error ? error.message : "The approved tool call failed.";
       setStatuses((current) => ({ ...current, [actionId]: "awaiting-owner" }));
@@ -534,7 +565,7 @@ export function MissionControl() {
                 aria-busy={isRunning}
                 className="button primary"
                 disabled={isRunning || Boolean(waitingAction) || missionIsComplete}
-                onClick={runMission}
+                onClick={() => runMission()}
                 type="button"
               >
                 {isRunning ? <Clock3 aria-hidden="true" size={16} /> : <Play aria-hidden="true" size={16} />}
@@ -765,7 +796,7 @@ function MissionView({
                 onClick={() => onResolveReview(selectedAction.id, "approve")}
                 type="button"
               >
-                <Check aria-hidden="true" size={16} />Approve
+                <Check aria-hidden="true" size={16} />Approve &amp; continue
               </button>
               <button className="button reject" onClick={() => onResolveReview(selectedAction.id, "reject")} type="button">
                 <X aria-hidden="true" size={16} />Reject
