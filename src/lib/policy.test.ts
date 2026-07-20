@@ -3,7 +3,9 @@ import test from "node:test";
 
 import { demoMission } from "./demo";
 import { evaluateAction } from "./policy";
-import { canonicalize, createReceipt } from "./receipt";
+import { planMission } from "./planner";
+import { canonicalize, createReceipt, verifyReceiptChain } from "./receipt";
+import { executeGovernedAction, GovernanceError } from "./tools";
 
 test("allows routine internal research", () => {
   const action = demoMission.actions.find(
@@ -57,4 +59,109 @@ test("the same evaluated action produces the same receipt id", async () => {
 
   assert.equal(first.id, second.id);
   assert.equal(first.canonicalPayload, second.canonicalPayload);
+});
+
+test("live planner normalizes model JSON into governed tool calls", async () => {
+  const mission = await planMission(
+    {
+      objective: "Prepare and deliver a customer proposal",
+      customer: "Acme",
+      source: "CRM brief",
+      deadline: "2026-08-01",
+      budgetCapUsd: 100,
+    },
+    "live-ai",
+    async () => JSON.stringify({
+      title: "Prepare Acme proposal",
+      actions: [
+        { agent: "Scout", title: "Research", description: "Find context", kind: "research" },
+        { agent: "Planner", title: "Draft", description: "Write scope", kind: "draft" },
+        { agent: "Closer", title: "Send", description: "Deliver", kind: "external-send", destination: "acme@example.com" },
+      ],
+    }),
+  );
+
+  assert.equal(mission.planSource, "live-ai");
+  assert.equal(mission.actions[0].toolName, "workspace.search");
+  assert.equal(mission.actions[2].toolName, "outbox.send");
+});
+
+test("tool adapter refuses a reviewed action without owner authorization", async () => {
+  const action = demoMission.actions.find((candidate) => candidate.id === "action-send");
+  assert.ok(action);
+
+  await assert.rejects(
+    executeGovernedAction({
+      action,
+      mission: demoMission,
+      mode: "replay",
+      policies: [
+        { id: "policy-owner-approval", name: "Owner approval", description: "", enabled: true },
+      ],
+      previousArtifacts: [],
+    }),
+    (error: unknown) => error instanceof GovernanceError && /Owner approval/.test(error.message),
+  );
+});
+
+test("tool adapter fails closed on an over-cap spend", async () => {
+  const action = demoMission.actions.find((candidate) => candidate.id === "action-over-cap");
+  assert.ok(action);
+
+  await assert.rejects(
+    executeGovernedAction({
+      action,
+      mission: demoMission,
+      mode: "replay",
+      policies: [
+        { id: "policy-budget-cap", name: "Budget", description: "", enabled: true },
+      ],
+      previousArtifacts: [],
+      authorization: "owner-approved",
+    }),
+    (error: unknown) => error instanceof GovernanceError && /Policy blocked/.test(error.message),
+  );
+});
+
+test("owner authorization releases a reviewed sandbox tool", async () => {
+  const action = demoMission.actions.find((candidate) => candidate.id === "action-send");
+  assert.ok(action);
+  const { artifact } = await executeGovernedAction({
+    action,
+    mission: demoMission,
+    mode: "replay",
+    policies: [
+      { id: "policy-owner-approval", name: "Owner approval", description: "", enabled: true },
+    ],
+    previousArtifacts: [],
+    authorization: "owner-approved",
+  });
+
+  assert.equal(artifact.provider, "sandbox");
+  assert.match(artifact.content, /No live message was sent/);
+});
+
+test("receipt verification detects a broken chain", async () => {
+  const firstAction = demoMission.actions[0];
+  const secondAction = demoMission.actions[1];
+  const first = await createReceipt(
+    demoMission,
+    evaluateAction(firstAction, demoMission),
+    "delegated",
+    null,
+    1,
+  );
+  const second = await createReceipt(
+    demoMission,
+    evaluateAction(secondAction, demoMission),
+    "delegated",
+    first.id,
+    2,
+  );
+
+  assert.deepEqual(await verifyReceiptChain([first, second]), { valid: true, checked: 2 });
+  const tampered = { ...second, previousReceiptId: "sp_tampered" };
+  const result = await verifyReceiptChain([first, tampered]);
+  assert.equal(result.valid, false);
+  assert.match(result.error ?? "", /chain link mismatch/);
 });

@@ -1,15 +1,21 @@
-import type { Mission } from "./types";
+import type { Mission, MissionDraft } from "./types";
+
+export const demoDraft: MissionDraft = {
+  objective:
+    "Qualify the opportunity, prepare a scoped proposal, and secure owner approval before making any external commitment.",
+  customer: "Northstar Protocol",
+  source: "Inbound product brief",
+  deadline: "2026-07-24",
+  budgetCapUsd: 120,
+};
 
 export const demoMission: Mission = {
   id: "mission-bq-001",
   title: "Win a qualified agent infrastructure engagement",
-  customer: "Northstar Protocol",
-  source: "Inbound product brief",
-  objective:
-    "Qualify the opportunity, prepare a scoped proposal, and secure owner approval before making any external commitment.",
-  deadline: "2026-07-24",
-  budgetCapUsd: 120,
+  ...demoDraft,
   status: "ready",
+  planSource: "replay",
+  plannerModel: "SolePilot reference planner v1",
   actions: [
     {
       id: "action-research",
@@ -18,6 +24,7 @@ export const demoMission: Mission = {
       description:
         "Summarize the customer's product, technical surface, and likely buying criteria.",
       kind: "research",
+      toolName: "workspace.search",
     },
     {
       id: "action-scope",
@@ -26,6 +33,7 @@ export const demoMission: Mission = {
       description:
         "Produce a seven-day plan with acceptance criteria and explicit exclusions.",
       kind: "draft",
+      toolName: "document.compose",
     },
     {
       id: "action-send",
@@ -34,6 +42,7 @@ export const demoMission: Mission = {
       description:
         "Send the approved scope and commercial terms to the customer contact.",
       kind: "external-send",
+      toolName: "outbox.send",
       destination: "founder@northstar.example",
     },
     {
@@ -41,20 +50,22 @@ export const demoMission: Mission = {
       agent: "Operator",
       title: "Purchase an API evaluation pack",
       description:
-        "Buy the API credits required to validate the customer's integration.",
+        "Reserve the API credits required to validate the customer's integration.",
       kind: "spend",
+      toolName: "wallet.reserve",
       amountUsd: 48,
-      destination: "API vendor",
+      destination: "API vendor sandbox",
     },
     {
       id: "action-over-cap",
       agent: "Operator",
       title: "Upgrade to an enterprise data plan",
       description:
-        "Attempt to purchase a larger data package without changing the mission budget.",
+        "Attempt to reserve a larger data package without changing the mission budget.",
       kind: "spend",
+      toolName: "wallet.reserve",
       amountUsd: 240,
-      destination: "Data vendor",
+      destination: "Data vendor sandbox",
     },
   ],
 };
