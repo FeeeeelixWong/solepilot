@@ -75,7 +75,10 @@ must still be used before trusting restored data.
 `POST /api/plans` validates bounded mission input and returns a typed online
 plan from the reliable server planner. It requires no browser popup, external
 account, or model credential. An optional model planner can still be injected
-behind the same normalizer without changing policy semantics.
+behind the same normalizer without changing policy semantics. Normal online
+plans never inject a synthetic violation: a spend action is proposed only when
+the objective requests one, and its amount remains inside the owner cap. Replay
+retains the deterministic over-cap case for policy stress testing.
 
 `POST /api/tools/research` accepts bounded mission context, queries allow-listed
 public sources, labels returned text as untrusted evidence, and returns source

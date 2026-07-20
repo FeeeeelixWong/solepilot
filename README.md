@@ -34,7 +34,8 @@ The public demo offers two runtime modes:
   endpoint, retrieves current external evidence through server-side research
   adapters, produces an evidence-backed artifact, and pauses before a real Telegram delivery.
   Delivery requires the owner's connector code and returns a real
-  provider message ID.
+  provider message ID. It does not inject synthetic policy violations into a
+  normal mission; spending appears only when the objective explicitly requests it.
 
 For the shortest complete run:
 
@@ -51,8 +52,8 @@ For the shortest complete run:
 
 Replay external actions remain sandboxed by design. Online missions use a fixed
 Telegram destination protected by a server-side owner code. Spending remains
-blocked or sandbox-authorized; SolePilot does not expose a payment credential
-to the planner.
+within the owner cap and sandbox-authorized; over-cap stress testing remains in
+Replay. SolePilot does not expose a payment credential to the planner.
 
 ## Runtime architecture
 

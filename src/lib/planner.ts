@@ -115,6 +115,39 @@ export function createReplayPlan(draft: MissionDraft): Mission {
 
 export function createOnlinePlan(draft: MissionDraft): Mission {
   const safeBudget = Math.max(1, Number(draft.budgetCapUsd) || 100);
+  const requestsSpend = /\b(buy|purchase|pay|subscribe|reserve|budget|spend)\b|购买|采购|付费|支付|订阅|预算|花费/i
+    .test(draft.objective);
+  const actions: AgentAction[] = [
+    makeAction(0, "research", "online", {
+      agent: "Scout",
+      title: `Research ${draft.source}`,
+      description: `Collect live evidence relevant to ${draft.objective} for ${draft.customer}.`,
+    }),
+    makeAction(1, "draft", "online", {
+      agent: "Planner",
+      title: "Synthesize an execution brief",
+      description:
+        "Turn the retrieved evidence into a bounded brief with findings, acceptance criteria, and exclusions.",
+    }),
+  ];
+
+  if (requestsSpend) {
+    actions.push(makeAction(actions.length, "spend", "online", {
+      agent: "Operator",
+      title: "Reserve approved execution budget",
+      description: "Request an owner-reviewed sandbox reservation within the mission budget cap.",
+      amountUsd: Math.max(1, Math.round(safeBudget * 0.4)),
+      destination: "Tooling sandbox",
+    }));
+  }
+
+  actions.push(makeAction(actions.length, "external-send", "online", {
+    agent: "Closer",
+    title: "Deliver the approved brief",
+    description:
+      "Release the final artifact through the fixed-destination Telegram connector after owner approval.",
+    destination: "Owner Telegram delivery channel",
+  }));
 
   return {
     id: missionId(),
@@ -125,40 +158,7 @@ export function createOnlinePlan(draft: MissionDraft): Mission {
     planSource: "live-ai",
     executionMode: "online",
     plannerModel: "SolePilot server planner v2",
-    actions: [
-      makeAction(0, "research", "online", {
-        agent: "Scout",
-        title: `Research ${draft.source}`,
-        description: `Collect live evidence relevant to ${draft.objective} for ${draft.customer}.`,
-      }),
-      makeAction(1, "draft", "online", {
-        agent: "Planner",
-        title: "Synthesize an execution brief",
-        description:
-          "Turn the retrieved evidence into a bounded brief with findings, acceptance criteria, and exclusions.",
-      }),
-      makeAction(2, "external-send", "online", {
-        agent: "Closer",
-        title: "Deliver the approved brief",
-        description:
-          "Release the final artifact through the fixed-destination Telegram connector after owner approval.",
-        destination: "Owner Telegram delivery channel",
-      }),
-      makeAction(3, "spend", "online", {
-        agent: "Operator",
-        title: "Reserve execution tools",
-        description: "Request an in-policy sandbox reservation for follow-up execution tools.",
-        amountUsd: Math.max(1, Math.round(safeBudget * 0.4)),
-        destination: "Tooling sandbox",
-      }),
-      makeAction(4, "spend", "online", {
-        agent: "Operator",
-        title: "Attempt an out-of-policy expansion",
-        description: "Test fail-closed enforcement with a reservation above delegated authority.",
-        amountUsd: Math.max(2, Math.round(safeBudget * 1.8)),
-        destination: "Enterprise vendor sandbox",
-      }),
-    ],
+    actions,
   };
 }
 

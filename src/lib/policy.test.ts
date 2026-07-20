@@ -100,7 +100,24 @@ test("server planner creates a complete online plan without browser authenticati
   assert.equal(mission.plannerModel, "SolePilot server planner v2");
   assert.equal(mission.actions[0].toolName, "web.search");
   assert.ok(mission.actions.some((action) => action.toolName === "outbox.send"));
-  assert.ok(mission.actions.some((action) => (action.amountUsd ?? 0) > 50));
+  assert.equal(mission.actions.length, 3);
+  assert.ok(mission.actions.every((action) => (action.amountUsd ?? 0) <= 50));
+});
+
+test("server planner adds only an in-cap spend when the objective requests payment", () => {
+  const mission = createOnlinePlan({
+    objective: "Research the market, purchase an API plan, and deliver the brief",
+    customer: "Owner",
+    source: "Agent infrastructure",
+    deadline: "2026-08-01",
+    budgetCapUsd: 50,
+  });
+  const spend = mission.actions.find((action) => action.kind === "spend");
+
+  assert.ok(spend);
+  assert.equal(spend.amountUsd, 20);
+  assert.ok((spend.amountUsd ?? Infinity) <= mission.budgetCapUsd);
+  assert.equal(mission.actions.at(-1)?.toolName, "outbox.send");
 });
 
 test("online draft has a deterministic evidence-backed fallback", async () => {
