@@ -10,7 +10,10 @@ The public competition build has two execution surfaces. Replay is a client-side
 reference runtime that any judge can run without credentials. Online Agent uses
 same-origin Next.js route handlers for live research and owner-approved Telegram
 delivery. The server keeps provider credentials and the fixed destination out
-of model and browser contexts.
+of model and browser contexts. Solana payment missions use a separate,
+non-custodial client connector: the normalized payment intent is reviewed by
+policy first, and only the owner's wallet extension can sign the resulting
+Devnet transaction.
 
 ## Execution sequence
 
@@ -90,6 +93,27 @@ completed artifact, and sends to the server-configured chat. Callers cannot
 select an arbitrary recipient. The response includes Telegram's message ID and
 provider timestamp before it is attested and sealed into the receipt chain.
 
+## Solana payment boundary
+
+A payment mission starts with owner-entered structured fields rather than a
+free-form model prompt: payee name, recipient address, SOL amount, maximum SOL
+cap, purpose, deadline, requirements, and the fixed `solana-devnet` network.
+The server validates the address and numeric bounds before returning a plan.
+
+The planner copies the recipient, amount, asset, network, purpose, and requirements into
+the typed `wallet.transfer` action. `policy-payment-intent` compares that action
+with the sealed mission intent and fails closed if any protected field changes
+or the payment deadline has expired.
+`policy-budget-cap` rejects amounts above the owner cap, and
+`policy-owner-approval` pauses every valid payment before invocation.
+
+After approval, the browser dynamically loads the Solana adapter, connects to
+OKX Wallet or a compatible Phantom-style provider, builds a System Program SOL
+transfer, and requests the wallet signature. SolePilot never handles the seed
+phrase or private key. The adapter waits for Devnet confirmation and records
+the sender, recipient, amount, transaction signature, and Explorer URL as the
+tool artifact sealed into the receipt chain.
+
 ## Production replacement plan
 
 The reference interfaces are intentionally narrow so production systems can
@@ -100,7 +124,7 @@ replace adapters without changing policy semantics:
 | Browser local storage | Encrypted workspace database with tenant isolation |
 | Reliable server planner | Organization-managed model gateway with schema-constrained output |
 | Fixed Telegram outbox | Email/CRM connectors with per-tenant scoped OAuth |
-| Sandbox reservation | Payment provider with per-transaction authorization |
+| Solana Devnet wallet adapter | Production network adapter with transaction simulation, allow-listed assets, and per-transaction authorization |
 | Browser owner approval | Passkey-signed approval capability |
 | SHA-256 receipt chain | Signed append-only log with external timestamp anchor |
 
@@ -114,7 +138,8 @@ general-purpose credential from the model context.
 - Receipts are hash-linked and online results are server-attested, but owner
   approvals are not yet passkey-signed.
 - Telegram is a fixed-destination proof connector, not a multi-tenant outbox.
-- Spending is deliberately non-custodial and does not move funds.
+- Payment execution is deliberately limited to Solana Devnet; it moves only
+  test SOL after a wallet prompt and is not a mainnet payment product.
 - The default planner and evidence-backed draft are deterministic; model-driven
   synthesis is an optional production adapter rather than a demo dependency.
 

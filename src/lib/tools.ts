@@ -42,6 +42,23 @@ function deterministicContent(
     case "web.search":
       throw new Error("Online research must run through the server connector.");
     case "document.compose":
+      if (mission.payment) {
+        return {
+          provider: "deterministic",
+          summary: `Prepared a payment authorization for ${mission.payment.amountSol} SOL to ${mission.payment.payeeName}.`,
+          content: [
+            "PAYMENT AUTHORIZATION",
+            `Payee: ${mission.payment.payeeName}`,
+            `Recipient: ${mission.payment.recipientAddress}`,
+            `Network: Solana Devnet`,
+            `Amount: ${mission.payment.amountSol} SOL`,
+            `Owner cap: ${mission.payment.maxAmountSol} SOL`,
+            `Purpose: ${mission.payment.purpose}`,
+            `Requirements: ${mission.payment.requirements}`,
+            "Status: prepared; wallet signature still required.",
+          ].join("\n"),
+        };
+      }
       return {
         provider: "deterministic",
         summary: "Produced a scoped brief with acceptance criteria and exclusions.",
@@ -77,6 +94,8 @@ function deterministicContent(
         summary: `Reserved $${action.amountUsd ?? 0} in the sandbox ledger.`,
         content: `SANDBOX RESERVATION\nVendor: ${action.destination ?? "Unspecified"}\nAmount: $${action.amountUsd ?? 0}\nStatus: owner approved\nNo funds moved.`,
       };
+    case "wallet.transfer":
+      throw new Error("Solana transfers must run through the owner wallet adapter.");
   }
 }
 
@@ -160,6 +179,36 @@ async function executeTool(
       mission,
       await sendTelegramDelivery(action, mission, previousArtifacts, ownerCode),
     );
+  }
+  if (mission.executionMode === "online" && action.toolName === "wallet.transfer") {
+    const { executeSolanaTransfer } = await import("./solana");
+    const transfer = await executeSolanaTransfer(action, mission);
+    const fingerprint = await sha256(canonicalize({
+      actionId: action.id,
+      missionId: mission.id,
+      signature: transfer.signature,
+      toolName: action.toolName,
+    }));
+    return {
+      id: `artifact_${fingerprint.slice(0, 18)}`,
+      missionId: mission.id,
+      actionId: action.id,
+      toolName: action.toolName,
+      provider: "solana-devnet",
+      title: action.title,
+      summary: `Confirmed ${transfer.amountSol} SOL to ${transfer.recipient} on Solana Devnet.`,
+      content: [
+        "SOLANA DEVNET PAYMENT RECEIPT",
+        `Sender: ${transfer.sender}`,
+        `Recipient: ${transfer.recipient}`,
+        `Amount: ${transfer.amountSol} SOL`,
+        `Signature: ${transfer.signature}`,
+        "Status: confirmed",
+      ].join("\n"),
+      requestId: transfer.signature,
+      externalReference: transfer.explorerUrl,
+      createdAt: new Date().toISOString(),
+    };
   }
 
   const result = mode === "live-ai" && complete

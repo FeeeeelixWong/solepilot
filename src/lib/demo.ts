@@ -7,6 +7,7 @@ export const demoDraft: MissionDraft = {
   source: "Inbound product brief",
   deadline: "2026-07-24",
   budgetCapUsd: 120,
+  missionType: "work",
 };
 
 export const demoMission: Mission = {

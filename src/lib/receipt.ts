@@ -86,6 +86,8 @@ export async function createReceipt(
     },
     mission: {
       budgetCapUsd: mission.budgetCapUsd,
+      missionType: mission.missionType ?? "work",
+      payment: mission.payment ?? null,
       id: mission.id,
       objective: mission.objective,
       executionMode: mission.executionMode,

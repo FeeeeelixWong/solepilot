@@ -629,6 +629,12 @@ h1 {
   text-align: right;
 }
 
+.detail-list dd {
+  max-width: 65%;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
 .rule-result {
   display: flex;
   align-items: flex-start;
@@ -1210,6 +1216,52 @@ h1 {
   border: 0;
 }
 
+.mission-type-choice {
+  margin-top: 0;
+  margin-bottom: 20px;
+}
+
+.planner-choice > button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.payment-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 13px;
+  border: 1px solid #a9d6bd;
+  border-radius: var(--radius);
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
+.payment-notice div,
+.payment-notice strong,
+.payment-notice span {
+  display: block;
+}
+
+.payment-notice strong {
+  font-size: 11px;
+}
+
+.payment-notice span {
+  margin-top: 3px;
+  color: var(--ink-muted);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.payment-address-field {
+  grid-column: 1 / -1;
+}
+
+.payment-grid ~ .objective-field {
+  margin-top: 16px;
+}
+
 .planner-choice legend {
   grid-column: 1 / -1;
   margin-bottom: 7px;
@@ -1492,6 +1544,10 @@ h1 {
   }
 
   .planner-choice legend {
+    grid-column: 1;
+  }
+
+  .payment-address-field {
     grid-column: 1;
   }
 

@@ -52,6 +52,7 @@ import type {
   RuntimeReceipt,
   RuntimeStatus,
   ToolArtifact,
+  PaymentIntent,
 } from "@/lib/types";
 
 type View = "mission" | "policies" | "receipts";
@@ -63,6 +64,7 @@ const actionIcons: Record<AgentAction["kind"], typeof Search> = {
   "external-send": Send,
   "commercial-commitment": UserRoundCheck,
   spend: WalletCards,
+  payment: WalletCards,
 };
 
 const navItems: Array<{ id: View; label: string; icon: typeof Activity }> = [
@@ -73,6 +75,16 @@ const navItems: Array<{ id: View; label: string; icon: typeof Activity }> = [
 
 const delay = (duration: number) =>
   new Promise((resolve) => window.setTimeout(resolve, duration));
+
+const defaultPaymentIntent: PaymentIntent = {
+  payeeName: "",
+  recipientAddress: "",
+  amountSol: 0.01,
+  maxAmountSol: 0.05,
+  purpose: "Pay an approved vendor invoice",
+  requirements: "Recipient and amount must match this instruction; owner wallet signature required.",
+  network: "solana-devnet",
+};
 
 function statusesFor(mission: Mission): Record<string, RuntimeStatus> {
   return Object.fromEntries(
@@ -136,7 +148,11 @@ export function MissionControl() {
     if (saved) {
       setMission(saved.mission);
       setStatuses(saved.statuses);
-      setPolicies(saved.policies);
+      const savedPolicies = new Map(saved.policies.map((policy) => [policy.id, policy]));
+      setPolicies(ownerPolicies.map((policy) => ({
+        ...policy,
+        enabled: savedPolicies.get(policy.id)?.enabled ?? policy.enabled,
+      })));
       setReceipts(saved.receipts);
       setArtifacts(saved.artifacts);
       setEvents(saved.events);
@@ -624,6 +640,8 @@ export function MissionControl() {
             source: mission.source || demoDraft.source,
             deadline: mission.deadline || demoDraft.deadline,
             budgetCapUsd: mission.budgetCapUsd || demoDraft.budgetCapUsd,
+            missionType: mission.missionType ?? "work",
+            payment: mission.payment,
           }}
           initialMode={plannerMode}
           onClose={() => setComposerOpen(false)}
@@ -674,7 +692,12 @@ function MissionView({
       <section className="mission-main" aria-label="Mission workflow">
         <div className="metric-band">
           <Metric label="Stakeholder" value={mission.customer} />
-          <Metric label="Budget cap" value={`$${mission.budgetCapUsd}`} />
+          <Metric
+            label="Budget cap"
+            value={mission.payment
+              ? `${mission.payment.maxAmountSol} SOL`
+              : `$${mission.budgetCapUsd}`}
+          />
           <Metric label="Runtime" value={mission.executionMode === "online" ? "Online agent" : "Safe replay"} />
           <Metric label="Progress" value={`${completedCount}/${mission.actions.length} outcomes`} />
         </div>
@@ -726,7 +749,14 @@ function MissionView({
           <div><dt>Tool</dt><dd><code>{selectedAction.toolName}</code></dd></div>
           <div><dt>Authority</dt><dd>{decisionLabel(selectedEvaluation.decision)}</dd></div>
           <div><dt>Destination</dt><dd>{selectedAction.destination ?? "Owner workspace"}</dd></div>
-          <div><dt>Spend</dt><dd>{selectedAction.amountUsd ? `$${selectedAction.amountUsd}` : "$0"}</dd></div>
+          <div>
+            <dt>{selectedAction.kind === "payment" ? "Payment" : "Spend"}</dt>
+            <dd>{selectedAction.kind === "payment"
+              ? `${selectedAction.amount ?? 0} ${selectedAction.asset ?? "SOL"}`
+              : selectedAction.amountUsd ? `$${selectedAction.amountUsd}` : "$0"}</dd>
+          </div>
+          {selectedAction.network ? <div><dt>Network</dt><dd>{selectedAction.network}</dd></div> : null}
+          {selectedAction.requirements ? <div><dt>Requirements</dt><dd>{selectedAction.requirements}</dd></div> : null}
         </dl>
 
         <div className="rule-result" data-decision={selectedEvaluation.decision}>
@@ -796,7 +826,8 @@ function MissionView({
                 onClick={() => onResolveReview(selectedAction.id, "approve")}
                 type="button"
               >
-                <Check aria-hidden="true" size={16} />Approve &amp; continue
+                <Check aria-hidden="true" size={16} />
+                {selectedAction.kind === "payment" ? "Approve & pay" : "Approve & continue"}
               </button>
               <button className="button reject" onClick={() => onResolveReview(selectedAction.id, "reject")} type="button">
                 <X aria-hidden="true" size={16} />Reject
@@ -988,6 +1019,26 @@ function MissionComposer({ initialDraft, initialMode, onClose, onCreate }: {
   const [isPlanning, setIsPlanning] = useState(false);
   const [error, setError] = useState("");
   const abortController = useRef(new AbortController());
+  const payment = draft.payment ?? defaultPaymentIntent;
+
+  function selectMissionType(missionType: MissionDraft["missionType"]) {
+    setDraft((current) => ({
+      ...current,
+      missionType,
+      payment: missionType === "payment"
+        ? current.payment ?? defaultPaymentIntent
+        : current.payment,
+    }));
+    if (missionType === "payment") setMode("live-ai");
+  }
+
+  function updatePayment(values: Partial<PaymentIntent>) {
+    setDraft((current) => ({
+      ...current,
+      missionType: "payment",
+      payment: { ...(current.payment ?? defaultPaymentIntent), ...values },
+    }));
+  }
 
   function close() {
     abortController.current.abort();
@@ -997,6 +1048,10 @@ function MissionComposer({ initialDraft, initialMode, onClose, onCreate }: {
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
+    if (draft.missionType === "payment" && payment.amountSol > payment.maxAmountSol) {
+      setError("Payment amount cannot exceed the maximum authorized SOL.");
+      return;
+    }
     setIsPlanning(true);
     try {
       await onCreate(draft, mode, abortController.current.signal);
@@ -1019,41 +1074,91 @@ function MissionComposer({ initialDraft, initialMode, onClose, onCreate }: {
         </header>
 
         <form onSubmit={submit}>
-          <label className="form-field objective-field">
-            <span>Objective</span>
-            <textarea
-              maxLength={500}
-              onChange={(event) => setDraft((current) => ({ ...current, objective: event.target.value }))}
-              required
-              value={draft.objective}
-            />
-          </label>
-          <div className="form-grid">
-            <label className="form-field">
-              <span>Stakeholder</span>
-              <input onChange={(event) => setDraft((current) => ({ ...current, customer: event.target.value }))} required value={draft.customer} />
-            </label>
-            <label className="form-field">
-              <span>Source</span>
-              <input onChange={(event) => setDraft((current) => ({ ...current, source: event.target.value }))} required value={draft.source} />
-            </label>
-            <label className="form-field">
-              <span>Deadline</span>
-              <input onChange={(event) => setDraft((current) => ({ ...current, deadline: event.target.value }))} required type="date" value={draft.deadline} />
-            </label>
-            <label className="form-field">
-              <span>Budget cap (USD)</span>
-              <input min="1" onChange={(event) => setDraft((current) => ({ ...current, budgetCapUsd: Number(event.target.value) }))} required type="number" value={draft.budgetCapUsd} />
-            </label>
-          </div>
+          <fieldset className="planner-choice mission-type-choice">
+            <legend>Mission type</legend>
+            <button data-active={draft.missionType === "work"} onClick={() => selectMissionType("work")} type="button">
+              <FileCheck2 size={17} /><span><strong>Work delivery</strong><small>Research, draft, and governed delivery</small></span>
+            </button>
+            <button data-active={draft.missionType === "payment"} onClick={() => selectMissionType("payment")} type="button">
+              <WalletCards size={17} /><span><strong>Solana payment</strong><small>Owner-defined Devnet transfer</small></span>
+            </button>
+          </fieldset>
+
+          {draft.missionType === "payment" ? (
+            <>
+              <div className="payment-notice">
+                <ShieldCheck size={17} />
+                <div><strong>Solana Devnet only</strong><span>The owner wallet signs the exact transfer. SolePilot never receives a private key.</span></div>
+              </div>
+              <div className="form-grid payment-grid">
+                <label className="form-field">
+                  <span>Payee name</span>
+                  <input onChange={(event) => updatePayment({ payeeName: event.target.value })} placeholder="Acme API Services" required value={payment.payeeName} />
+                </label>
+                <label className="form-field">
+                  <span>Network</span>
+                  <input readOnly value="Solana Devnet" />
+                </label>
+                <label className="form-field payment-address-field">
+                  <span>Recipient address</span>
+                  <input autoCapitalize="off" autoCorrect="off" onChange={(event) => updatePayment({ recipientAddress: event.target.value.trim() })} placeholder="Solana recipient address" required spellCheck={false} value={payment.recipientAddress} />
+                </label>
+                <label className="form-field">
+                  <span>Amount (SOL)</span>
+                  <input max={payment.maxAmountSol} min="0.000001" onChange={(event) => updatePayment({ amountSol: Number(event.target.value) })} required step="0.000001" type="number" value={payment.amountSol} />
+                </label>
+                <label className="form-field">
+                  <span>Maximum authorized (SOL)</span>
+                  <input min="0.000001" onChange={(event) => updatePayment({ maxAmountSol: Number(event.target.value) })} required step="0.000001" type="number" value={payment.maxAmountSol} />
+                </label>
+                <label className="form-field">
+                  <span>Payment deadline</span>
+                  <input onChange={(event) => setDraft((current) => ({ ...current, deadline: event.target.value }))} required type="date" value={draft.deadline} />
+                </label>
+              </div>
+              <label className="form-field objective-field">
+                <span>Payment purpose</span>
+                <textarea maxLength={500} onChange={(event) => updatePayment({ purpose: event.target.value })} required value={payment.purpose} />
+              </label>
+              <label className="form-field objective-field">
+                <span>Execution requirements</span>
+                <textarea maxLength={500} onChange={(event) => updatePayment({ requirements: event.target.value })} required value={payment.requirements} />
+              </label>
+            </>
+          ) : (
+            <>
+              <label className="form-field objective-field">
+                <span>Objective</span>
+                <textarea maxLength={500} onChange={(event) => setDraft((current) => ({ ...current, objective: event.target.value }))} required value={draft.objective} />
+              </label>
+              <div className="form-grid">
+                <label className="form-field">
+                  <span>Stakeholder</span>
+                  <input onChange={(event) => setDraft((current) => ({ ...current, customer: event.target.value }))} required value={draft.customer} />
+                </label>
+                <label className="form-field">
+                  <span>Source</span>
+                  <input onChange={(event) => setDraft((current) => ({ ...current, source: event.target.value }))} required value={draft.source} />
+                </label>
+                <label className="form-field">
+                  <span>Deadline</span>
+                  <input onChange={(event) => setDraft((current) => ({ ...current, deadline: event.target.value }))} required type="date" value={draft.deadline} />
+                </label>
+                <label className="form-field">
+                  <span>Budget cap (USD)</span>
+                  <input min="1" onChange={(event) => setDraft((current) => ({ ...current, budgetCapUsd: Number(event.target.value) }))} required type="number" value={draft.budgetCapUsd} />
+                </label>
+              </div>
+            </>
+          )}
 
           <fieldset className="planner-choice">
             <legend>Planner</legend>
-            <button data-active={mode === "replay"} onClick={() => setMode("replay")} type="button">
+            <button data-active={mode === "replay"} disabled={draft.missionType === "payment"} onClick={() => setMode("replay")} type="button">
               <FileJson size={17} /><span><strong>Replay</strong><small>Zero-config reference run</small></span>
             </button>
             <button data-active={mode === "live-ai"} onClick={() => setMode("live-ai")} type="button">
-              <BrainCircuit size={17} /><span><strong>Online agent</strong><small>Server planning, live research, governed delivery</small></span>
+              <BrainCircuit size={17} /><span><strong>Online agent</strong><small>{draft.missionType === "payment" ? "Structured intent, wallet signature, on-chain receipt" : "Server planning, live research, governed delivery"}</small></span>
             </button>
           </fieldset>
 
@@ -1063,7 +1168,13 @@ function MissionComposer({ initialDraft, initialMode, onClose, onCreate }: {
             <button className="button secondary" onClick={close} type="button">Cancel</button>
             <button className="button primary create-plan" disabled={isPlanning} type="submit">
               {isPlanning ? <Clock3 size={16} /> : mode === "live-ai" ? <Sparkles size={16} /> : <Play size={16} />}
-              {isPlanning ? "Planning on server" : mode === "live-ai" ? "Launch online agent" : "Create replay plan"}
+              {isPlanning
+                ? "Planning on server"
+                : draft.missionType === "payment"
+                  ? "Create payment mission"
+                  : mode === "live-ai"
+                    ? "Launch online agent"
+                    : "Create replay plan"}
             </button>
           </footer>
         </form>

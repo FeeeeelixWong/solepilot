@@ -3,7 +3,8 @@ export type ActionKind =
   | "draft"
   | "external-send"
   | "commercial-commitment"
-  | "spend";
+  | "spend"
+  | "payment";
 
 export type ToolName =
   | "workspace.search"
@@ -11,7 +12,20 @@ export type ToolName =
   | "document.compose"
   | "outbox.send"
   | "commitment.create"
-  | "wallet.reserve";
+  | "wallet.reserve"
+  | "wallet.transfer";
+
+export type MissionType = "work" | "payment";
+
+export interface PaymentIntent {
+  payeeName: string;
+  recipientAddress: string;
+  amountSol: number;
+  maxAmountSol: number;
+  purpose: string;
+  requirements: string;
+  network: "solana-devnet";
+}
 
 export type Decision = "allow" | "review" | "block";
 export type PlannerMode = "replay" | "live-ai";
@@ -34,6 +48,11 @@ export interface AgentAction {
   toolName: ToolName;
   destination?: string;
   amountUsd?: number;
+  amount?: number;
+  asset?: "SOL";
+  network?: PaymentIntent["network"];
+  recipient?: string;
+  requirements?: string;
   containsSensitiveData?: boolean;
 }
 
@@ -45,6 +64,8 @@ export interface Mission {
   objective: string;
   deadline: string;
   budgetCapUsd: number;
+  missionType?: MissionType;
+  payment?: PaymentIntent;
   status: MissionStatus;
   planSource: PlannerMode;
   executionMode: ExecutionMode;
@@ -58,6 +79,8 @@ export interface MissionDraft {
   source: string;
   deadline: string;
   budgetCapUsd: number;
+  missionType: MissionType;
+  payment?: PaymentIntent;
 }
 
 export interface OwnerPolicy {
@@ -84,7 +107,8 @@ export interface ToolArtifact {
     | "puter-ai"
     | "sandbox"
     | "online-research"
-    | "telegram";
+    | "telegram"
+    | "solana-devnet";
   title: string;
   summary: string;
   content: string;

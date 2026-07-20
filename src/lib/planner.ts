@@ -12,12 +12,20 @@ export const LIVE_MODEL = "openai/gpt-5.4-nano";
 
 export type ChatCompletion = (prompt: string) => Promise<string>;
 
+class PlannerRequestError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PlannerRequestError";
+  }
+}
+
 const sandboxToolByKind: Record<ActionKind, ToolName> = {
   research: "workspace.search",
   draft: "document.compose",
   "external-send": "outbox.send",
   "commercial-commitment": "commitment.create",
   spend: "wallet.reserve",
+  payment: "wallet.transfer",
 };
 
 const validKinds = new Set<ActionKind>(Object.keys(sandboxToolByKind) as ActionKind[]);
@@ -115,6 +123,43 @@ export function createReplayPlan(draft: MissionDraft): Mission {
 
 export function createOnlinePlan(draft: MissionDraft): Mission {
   const safeBudget = Math.max(1, Number(draft.budgetCapUsd) || 100);
+  if (draft.missionType === "payment" && draft.payment) {
+    const payment = draft.payment;
+    const actions: AgentAction[] = [
+      makeAction(0, "draft", "online", {
+        agent: "Treasurer",
+        title: "Prepare payment authorization",
+        description: `Validate the owner-entered payment instruction and requirements for ${payment.payeeName}.`,
+      }),
+      makeAction(1, "payment", "online", {
+        agent: "Operator",
+        title: `Pay ${payment.payeeName}`,
+        description: payment.purpose,
+        destination: payment.recipientAddress,
+        recipient: payment.recipientAddress,
+        amount: payment.amountSol,
+        asset: "SOL",
+        network: payment.network,
+        requirements: payment.requirements,
+      }),
+    ];
+
+    return {
+      id: missionId(),
+      title: `Pay ${payment.payeeName} ${payment.amountSol} SOL`,
+      ...draft,
+      customer: payment.payeeName,
+      source: "Owner-entered payment instruction",
+      objective: payment.purpose,
+      budgetCapUsd: payment.maxAmountSol,
+      status: "ready",
+      planSource: "live-ai",
+      executionMode: "online",
+      plannerModel: "SolePilot payment planner v1",
+      actions,
+    };
+  }
+
   const requestsSpend = /\b(buy|purchase|pay|subscribe|reserve|budget|spend)\b|购买|采购|付费|支付|订阅|预算|花费/i
     .test(draft.objective);
   const actions: AgentAction[] = [
@@ -360,7 +405,7 @@ export async function planMission(
       | { error?: string }
       | null;
     if (!response.ok || !payload || !("actions" in payload)) {
-      throw new Error(
+      throw new PlannerRequestError(
         payload && "error" in payload && payload.error
           ? payload.error
           : "The server planner could not create this mission.",
@@ -369,6 +414,7 @@ export async function planMission(
     return payload;
   } catch (error) {
     if (signal?.aborted) throw error;
+    if (error instanceof PlannerRequestError) throw error;
     return {
       ...createOnlinePlan(draft),
       plannerModel: "SolePilot resilient planner v2",

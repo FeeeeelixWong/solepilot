@@ -36,6 +36,12 @@ The public demo offers two runtime modes:
   Delivery requires the owner's connector code and returns a real
   provider message ID. It does not inject synthetic policy violations into a
   normal mission; spending appears only when the objective explicitly requests it.
+- **Solana payment** captures an explicit payee, Devnet recipient address, SOL
+  amount, owner cap, purpose, deadline, and execution requirements. SolePilot
+  seals those fields into the governed action, pauses at the owner boundary,
+  and asks the owner's OKX Wallet or Phantom extension to sign the exact
+  transfer. A confirmed transaction produces a signature and Solana Explorer
+  link in the artifact and receipt ledger.
 
 For the shortest complete run:
 
@@ -50,10 +56,18 @@ For the shortest complete run:
 9. At the delivery boundary, enter the owner connector code and approve.
 10. Inspect the Telegram message ID, provider reference, and sealed receipt.
 
-Replay external actions remain sandboxed by design. Online missions use a fixed
+For a real payment run, select **New mission**, choose **Solana payment**, enter
+the vendor and payment instruction, and create the payment mission. Run the
+authorization step, inspect the exact recipient and amount in Policy Inspector,
+then select **Approve & pay**. The wallet extension remains the final signing
+boundary. This public build intentionally supports Solana Devnet only.
+
+Replay external actions remain sandboxed by design. Online work missions use a fixed
 Telegram destination protected by a server-side owner code. Spending remains
 within the owner cap and sandbox-authorized; over-cap stress testing remains in
-Replay. SolePilot does not expose a payment credential to the planner.
+Replay. Solana payment missions are non-custodial: the planner never receives a
+seed phrase or private key, and the browser asks the owner's wallet extension to
+sign only after policy evaluation and explicit approval.
 
 ## Runtime architecture
 
@@ -86,6 +100,10 @@ and the production replacement plan.
 - No-login same-origin server planner with a deterministic local fallback
 - Server-side online research using Wikipedia and Hacker News
 - Real owner-approved Telegram delivery through a fixed-destination connector
+- Structured Solana Devnet payment intents with exact recipient, amount, cap,
+  purpose, deadline, and requirement enforcement
+- Non-custodial OKX Wallet and Phantom signing with confirmed transaction and
+  Explorer evidence
 - Provider request IDs, evidence URLs, message IDs, and HMAC attestations
 - Deterministic Replay planner for reliable evaluation
 - Typed tools for workspace search, document composition, outbox delivery,
@@ -119,6 +137,7 @@ The test suite covers:
 - no-login online plan generation
 - evidence-backed drafting without an external model session
 - direct tool-adapter bypass attempts
+- payment-intent tampering, over-cap payment, and unsigned transfer attempts
 - approved sandbox execution
 - receipt-chain tamper detection
 

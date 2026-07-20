@@ -69,6 +69,7 @@ test("live planner normalizes model JSON into governed tool calls", async () => 
       source: "CRM brief",
       deadline: "2026-08-01",
       budgetCapUsd: 100,
+      missionType: "work",
     },
     "live-ai",
     async () => JSON.stringify({
@@ -94,6 +95,7 @@ test("server planner creates a complete online plan without browser authenticati
     source: "Agent infrastructure",
     deadline: "2026-08-01",
     budgetCapUsd: 50,
+    missionType: "work",
   });
 
   assert.equal(mission.executionMode, "online");
@@ -111,6 +113,7 @@ test("server planner adds only an in-cap spend when the objective requests payme
     source: "Agent infrastructure",
     deadline: "2026-08-01",
     budgetCapUsd: 50,
+    missionType: "work",
   });
   const spend = mission.actions.find((action) => action.kind === "spend");
 
@@ -120,6 +123,212 @@ test("server planner adds only an in-cap spend when the objective requests payme
   assert.equal(mission.actions.at(-1)?.toolName, "outbox.send");
 });
 
+test("payment planner preserves the owner-entered transfer payload", () => {
+  const payment = {
+    payeeName: "Devnet Vendor",
+    recipientAddress: "11111111111111111111111111111111",
+    amountSol: 0.01,
+    maxAmountSol: 0.05,
+    purpose: "Pay the approved test invoice",
+    requirements: "Use Solana Devnet and require an owner wallet signature.",
+    network: "solana-devnet" as const,
+  };
+  const mission = createOnlinePlan({
+    objective: payment.purpose,
+    customer: payment.payeeName,
+    source: "Owner-entered payment instruction",
+    deadline: "2026-08-01",
+    budgetCapUsd: payment.maxAmountSol,
+    missionType: "payment",
+    payment,
+  });
+  const transfer = mission.actions.find((action) => action.kind === "payment");
+
+  assert.ok(transfer);
+  assert.equal(transfer.toolName, "wallet.transfer");
+  assert.equal(transfer.recipient, payment.recipientAddress);
+  assert.equal(transfer.amount, payment.amountSol);
+  assert.equal(transfer.requirements, payment.requirements);
+  assert.equal(evaluateAction(transfer, mission).decision, "review");
+});
+
+test("payment policy blocks a transfer changed after owner entry", () => {
+  const payment = {
+    payeeName: "Devnet Vendor",
+    recipientAddress: "11111111111111111111111111111111",
+    amountSol: 0.01,
+    maxAmountSol: 0.05,
+    purpose: "Pay the approved test invoice",
+    requirements: "Require an owner wallet signature.",
+    network: "solana-devnet" as const,
+  };
+  const mission = createOnlinePlan({
+    objective: payment.purpose,
+    customer: payment.payeeName,
+    source: "Owner-entered payment instruction",
+    deadline: "2026-08-01",
+    budgetCapUsd: payment.maxAmountSol,
+    missionType: "payment",
+    payment,
+  });
+  const transfer = mission.actions.find((action) => action.kind === "payment");
+  assert.ok(transfer);
+
+  const result = evaluateAction({ ...transfer, amount: 0.02 }, mission);
+  assert.equal(result.decision, "block");
+  assert.deepEqual(result.matchedPolicyIds, ["policy-payment-intent"]);
+});
+
+test("payment policy blocks changed execution requirements", () => {
+  const payment = {
+    payeeName: "Devnet Vendor",
+    recipientAddress: "11111111111111111111111111111111",
+    amountSol: 0.01,
+    maxAmountSol: 0.05,
+    purpose: "Pay the approved test invoice",
+    requirements: "Require an owner wallet signature and a confirmed transaction.",
+    network: "solana-devnet" as const,
+  };
+  const mission = createOnlinePlan({
+    objective: payment.purpose,
+    customer: payment.payeeName,
+    source: "Owner-entered payment instruction",
+    deadline: "2026-08-01",
+    budgetCapUsd: payment.maxAmountSol,
+    missionType: "payment",
+    payment,
+  });
+  const transfer = mission.actions.find((action) => action.kind === "payment");
+  assert.ok(transfer);
+
+  const result = evaluateAction({ ...transfer, requirements: "No confirmation required." }, mission);
+  assert.equal(result.decision, "block");
+  assert.deepEqual(result.matchedPolicyIds, ["policy-payment-intent"]);
+});
+
+test("payment policy blocks an expired payment intent", () => {
+  const payment = {
+    payeeName: "Devnet Vendor",
+    recipientAddress: "11111111111111111111111111111111",
+    amountSol: 0.01,
+    maxAmountSol: 0.05,
+    purpose: "Pay the approved test invoice",
+    requirements: "Require an owner wallet signature.",
+    network: "solana-devnet" as const,
+  };
+  const mission = createOnlinePlan({
+    objective: payment.purpose,
+    customer: payment.payeeName,
+    source: "Owner-entered payment instruction",
+    deadline: "2000-01-01",
+    budgetCapUsd: payment.maxAmountSol,
+    missionType: "payment",
+    payment,
+  });
+  const transfer = mission.actions.find((action) => action.kind === "payment");
+  assert.ok(transfer);
+
+  const result = evaluateAction(transfer, mission);
+  assert.equal(result.decision, "block");
+  assert.match(result.reasons[0], /deadline has expired/);
+});
+
+test("payment policy blocks an owner-entered amount above its cap", () => {
+  const payment = {
+    payeeName: "Devnet Vendor",
+    recipientAddress: "11111111111111111111111111111111",
+    amountSol: 0.06,
+    maxAmountSol: 0.05,
+    purpose: "Pay the approved test invoice",
+    requirements: "Require an owner wallet signature.",
+    network: "solana-devnet" as const,
+  };
+  const mission = createOnlinePlan({
+    objective: payment.purpose,
+    customer: payment.payeeName,
+    source: "Owner-entered payment instruction",
+    deadline: "2026-08-01",
+    budgetCapUsd: payment.maxAmountSol,
+    missionType: "payment",
+    payment,
+  });
+  const transfer = mission.actions.find((action) => action.kind === "payment");
+  assert.ok(transfer);
+
+  const result = evaluateAction(transfer, mission);
+  assert.equal(result.decision, "block");
+  assert.deepEqual(result.matchedPolicyIds, ["policy-budget-cap"]);
+});
+
+test("tool adapter refuses a payment without owner authorization", async () => {
+  const payment = {
+    payeeName: "Devnet Vendor",
+    recipientAddress: "11111111111111111111111111111111",
+    amountSol: 0.01,
+    maxAmountSol: 0.05,
+    purpose: "Pay the approved test invoice",
+    requirements: "Require an owner wallet signature.",
+    network: "solana-devnet" as const,
+  };
+  const mission = createOnlinePlan({
+    objective: payment.purpose,
+    customer: payment.payeeName,
+    source: "Owner-entered payment instruction",
+    deadline: "2026-08-01",
+    budgetCapUsd: payment.maxAmountSol,
+    missionType: "payment",
+    payment,
+  });
+  const transfer = mission.actions.find((action) => action.kind === "payment");
+  assert.ok(transfer);
+
+  await assert.rejects(
+    executeGovernedAction({
+      action: transfer,
+      mission,
+      mode: "live-ai",
+      policies: [
+        { id: "policy-owner-approval", name: "Owner approval", description: "", enabled: true },
+      ],
+      previousArtifacts: [],
+    }),
+    (error: unknown) => error instanceof GovernanceError && /Owner approval/.test(error.message),
+  );
+});
+
+test("planner surfaces invalid payment input instead of using a fallback plan", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(
+    JSON.stringify({ error: "Payment amount cannot exceed the maximum authorized SOL." }),
+    { status: 400, headers: { "Content-Type": "application/json" } },
+  );
+
+  try {
+    await assert.rejects(
+      planMission({
+        objective: "Pay the approved invoice",
+        customer: "Devnet Vendor",
+        source: "Owner-entered payment instruction",
+        deadline: "2026-08-01",
+        budgetCapUsd: 0.05,
+        missionType: "payment",
+        payment: {
+          payeeName: "Devnet Vendor",
+          recipientAddress: "11111111111111111111111111111111",
+          amountSol: 0.06,
+          maxAmountSol: 0.05,
+          purpose: "Pay the approved invoice",
+          requirements: "Require owner signature.",
+          network: "solana-devnet",
+        },
+      }, "live-ai"),
+      /cannot exceed the maximum authorized SOL/,
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("online draft has a deterministic evidence-backed fallback", async () => {
   const mission = createOnlinePlan({
     objective: "Prepare a market brief",
@@ -127,6 +336,7 @@ test("online draft has a deterministic evidence-backed fallback", async () => {
     source: "Agent infrastructure",
     deadline: "2026-08-01",
     budgetCapUsd: 50,
+    missionType: "work",
   });
   const action = mission.actions.find((candidate) => candidate.kind === "draft");
   assert.ok(action);
