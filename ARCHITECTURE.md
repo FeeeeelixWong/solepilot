@@ -6,11 +6,11 @@ SolePilot is the authority layer between an agent planner and business tools.
 It does not treat model output as authorization. Model-generated actions are
 untrusted proposals until they pass schema normalization and policy evaluation.
 
-The public competition build is a client-side reference implementation so any
-judge can run it without credentials or infrastructure. Routine tools produce
-real artifacts in the browser. Consequential adapters write to a sandbox
-outbox, commitment registry, or reservation ledger; they do not send a live
-message, create a binding contract, or move funds.
+The public competition build has two execution surfaces. Replay is a client-side
+reference runtime that any judge can run without credentials. Online Agent uses
+same-origin Next.js route handlers for live research and owner-approved Telegram
+delivery. The server keeps provider credentials and the fixed destination out
+of model and browser contexts.
 
 ## Execution sequence
 
@@ -21,7 +21,8 @@ message, create a binding contract, or move funds.
 4. `evaluateAction` returns `allow`, `review`, or `block` with matched policy IDs.
 5. `executeGovernedAction` evaluates policy again at the tool boundary.
 6. Reviewed actions require the explicit `owner-approved` capability.
-7. A successful adapter call returns a `ToolArtifact`.
+7. A successful adapter call returns a `ToolArtifact`. Online artifacts include
+   provider request IDs, external references, and an HMAC attestation.
 8. The runtime commits the policy decision, final outcome, artifact digest, and
    previous receipt ID into the next receipt.
 
@@ -31,7 +32,7 @@ message, create a binding contract, or move funds.
 
 - Owner-supplied mission text
 - Model-generated titles, descriptions, destinations, and amounts
-- Any future connector response
+- External research text and every connector response
 - Restored browser state before receipt verification
 
 ### Trusted reference components
@@ -41,6 +42,7 @@ message, create a binding contract, or move funds.
 - Governed tool adapter
 - Canonical serializer and SHA-256 receipt builder
 - Receipt-chain verifier
+- Server-side fixed-destination connector and result attestation boundary
 
 The Live AI provider cannot choose a tool outside the allow-list and cannot
 override a policy result. Owner approval can release `review` actions but cannot
@@ -64,9 +66,21 @@ turns individual receipts into an ordered tamper-evident chain.
 ## Persistence
 
 The current runtime saves its mission, policies, statuses, artifacts, trace, and
-ledger in versioned browser local storage. This makes the demo resumable without
-a backend. Receipt verification must still be used before trusting restored
-data.
+ledger in versioned browser local storage. Online tool execution happens on the
+server, but the workspace remains local-first and resumable. Receipt verification
+must still be used before trusting restored data.
+
+## Online connector boundary
+
+`POST /api/tools/research` accepts bounded mission context, queries allow-listed
+public sources, labels returned text as untrusted evidence, and returns source
+URLs plus a signed execution result. The browser verifies that result through
+`POST /api/attestations/verify` before accepting it as a tool artifact.
+
+`POST /api/tools/telegram` requires the owner connector code, accepts only a
+completed artifact, and sends to the server-configured chat. Callers cannot
+select an arbitrary recipient. The response includes Telegram's message ID and
+provider timestamp before it is attested and sealed into the receipt chain.
 
 ## Production replacement plan
 
@@ -77,7 +91,7 @@ replace adapters without changing policy semantics:
 | --- | --- |
 | Browser local storage | Encrypted workspace database with tenant isolation |
 | Puter user session | Organization-managed model gateway |
-| Sandbox outbox | Email/CRM connector with scoped OAuth token |
+| Fixed Telegram outbox | Email/CRM connectors with per-tenant scoped OAuth |
 | Sandbox reservation | Payment provider with per-transaction authorization |
 | Browser owner approval | Passkey-signed approval capability |
 | SHA-256 receipt chain | Signed append-only log with external timestamp anchor |
@@ -89,8 +103,10 @@ general-purpose credential from the model context.
 ## Known limitations
 
 - Persistence is device-local rather than synchronized across owner devices.
-- Receipts are hash-linked but not yet signed by a hardware-backed owner key.
-- External side effects are sandboxed in the public demo.
+- Receipts are hash-linked and online results are server-attested, but owner
+  approvals are not yet passkey-signed.
+- Telegram is a fixed-destination proof connector, not a multi-tenant outbox.
+- Spending is deliberately non-custodial and does not move funds.
 - Live AI availability depends on the user's Puter session and provider quota.
 
 These are explicit deployment boundaries, not hidden simulated behavior.

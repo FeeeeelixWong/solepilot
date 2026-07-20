@@ -1,6 +1,7 @@
 import type {
   ActionKind,
   AgentAction,
+  ExecutionMode,
   Mission,
   MissionDraft,
   PlannerMode,
@@ -11,7 +12,7 @@ export const LIVE_MODEL = "openai/gpt-5.4-nano";
 
 export type ChatCompletion = (prompt: string) => Promise<string>;
 
-const toolByKind: Record<ActionKind, ToolName> = {
+const sandboxToolByKind: Record<ActionKind, ToolName> = {
   research: "workspace.search",
   draft: "document.compose",
   "external-send": "outbox.send",
@@ -19,7 +20,12 @@ const toolByKind: Record<ActionKind, ToolName> = {
   spend: "wallet.reserve",
 };
 
-const validKinds = new Set<ActionKind>(Object.keys(toolByKind) as ActionKind[]);
+const validKinds = new Set<ActionKind>(Object.keys(sandboxToolByKind) as ActionKind[]);
+
+function toolForKind(kind: ActionKind, executionMode: ExecutionMode): ToolName {
+  if (kind === "research" && executionMode === "online") return "web.search";
+  return sandboxToolByKind[kind];
+}
 
 function cleanText(value: unknown, fallback: string, maxLength = 240): string {
   if (typeof value !== "string") return fallback;
@@ -46,12 +52,13 @@ function actionId(index: number, kind: ActionKind): string {
 function makeAction(
   index: number,
   kind: ActionKind,
+  executionMode: ExecutionMode,
   values: Omit<AgentAction, "id" | "kind" | "toolName">,
 ): AgentAction {
   return {
     id: actionId(index, kind),
     kind,
-    toolName: toolByKind[kind],
+    toolName: toolForKind(kind, executionMode),
     ...values,
   };
 }
@@ -67,34 +74,35 @@ export function createReplayPlan(draft: MissionDraft): Mission {
     budgetCapUsd: safeBudget,
     status: "ready",
     planSource: "replay",
+    executionMode: "sandbox",
     plannerModel: "SolePilot reference planner v1",
     actions: [
-      makeAction(0, "research", {
+      makeAction(0, "research", "sandbox", {
         agent: "Scout",
         title: `Research ${draft.customer}`,
         description: `Inspect the workspace brief and extract evidence relevant to: ${draft.objective}`,
       }),
-      makeAction(1, "draft", {
+      makeAction(1, "draft", "sandbox", {
         agent: "Planner",
         title: "Draft an execution brief",
         description:
           "Turn the research artifact into a scoped plan with acceptance criteria and exclusions.",
       }),
-      makeAction(2, "external-send", {
+      makeAction(2, "external-send", "sandbox", {
         agent: "Closer",
         title: "Deliver the proposed plan",
         description:
           "Place the proposal in the governed outbox for delivery to the external stakeholder.",
         destination: `decision-maker@${draft.customer.toLowerCase().replace(/[^a-z0-9]+/g, "") || "customer"}.example`,
       }),
-      makeAction(3, "spend", {
+      makeAction(3, "spend", "sandbox", {
         agent: "Operator",
         title: "Reserve delivery tools",
         description: "Reserve a small sandbox budget for the tools needed to execute the plan.",
         amountUsd: Math.max(1, Math.round(safeBudget * 0.4)),
         destination: "Tooling sandbox",
       }),
-      makeAction(4, "spend", {
+      makeAction(4, "spend", "sandbox", {
         agent: "Operator",
         title: "Request an unplanned expansion",
         description: "Attempt to reserve an enterprise package beyond delegated authority.",
@@ -136,13 +144,15 @@ function normalizePlan(raw: unknown, draft: MissionDraft): Mission {
     const typedKind = kind as ActionKind;
     const amount = Number(value.amountUsd);
 
-    return makeAction(index, typedKind, {
+    return makeAction(index, typedKind, "online", {
       agent: cleanText(value.agent, `Agent ${index + 1}`, 40),
       title: cleanText(value.title, `Execute step ${index + 1}`, 80),
       description: cleanText(value.description, "Execute the proposed mission step."),
-      destination: typeof value.destination === "string"
-        ? cleanText(value.destination, "Owner workspace", 100)
-        : undefined,
+      destination: typedKind === "external-send"
+        ? "Owner Telegram delivery channel"
+        : typeof value.destination === "string"
+          ? cleanText(value.destination, "Owner workspace", 100)
+          : undefined,
       amountUsd: typedKind === "spend" && Number.isFinite(amount)
         ? Math.max(0, Math.round(amount * 100) / 100)
         : undefined,
@@ -168,6 +178,7 @@ function normalizePlan(raw: unknown, draft: MissionDraft): Mission {
     budgetCapUsd: Math.max(1, Number(draft.budgetCapUsd) || 100),
     status: "ready",
     planSource: "live-ai",
+    executionMode: "online",
     plannerModel: LIVE_MODEL,
     actions,
   };
@@ -190,7 +201,8 @@ Requirements:
 - 4 to 6 actions in execution order.
 - Include research and drafting.
 - Include at least one consequential external action that should require owner approval.
-- Include one reasonable spend at or below the cap and one clearly optional spend above the cap, so policy enforcement is observable.
+- Include one external-send action that delivers the final artifact after owner approval.
+- Include one optional spend above the cap, so fail-closed policy enforcement is observable without moving funds.
 - Do not claim that an external action has already happened.`;
 }
 

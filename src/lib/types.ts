@@ -7,6 +7,7 @@ export type ActionKind =
 
 export type ToolName =
   | "workspace.search"
+  | "web.search"
   | "document.compose"
   | "outbox.send"
   | "commitment.create"
@@ -14,6 +15,7 @@ export type ToolName =
 
 export type Decision = "allow" | "review" | "block";
 export type PlannerMode = "replay" | "live-ai";
+export type ExecutionMode = "sandbox" | "online";
 export type MissionStatus = "ready" | "running" | "awaiting-owner" | "complete";
 export type RuntimeStatus =
   | "pending"
@@ -45,6 +47,7 @@ export interface Mission {
   budgetCapUsd: number;
   status: MissionStatus;
   planSource: PlannerMode;
+  executionMode: ExecutionMode;
   plannerModel: string;
   actions: AgentAction[];
 }
@@ -76,10 +79,23 @@ export interface ToolArtifact {
   missionId: string;
   actionId: string;
   toolName: ToolName;
-  provider: "deterministic" | "puter-ai" | "sandbox";
+  provider:
+    | "deterministic"
+    | "puter-ai"
+    | "sandbox"
+    | "online-research"
+    | "telegram";
   title: string;
   summary: string;
   content: string;
+  requestId?: string;
+  externalReference?: string;
+  evidence?: Array<{
+    title: string;
+    url: string;
+    source: string;
+  }>;
+  attestation?: string;
   createdAt: string;
 }
 
@@ -110,7 +126,7 @@ export interface RuntimeEvent {
 }
 
 export interface PersistedRuntime {
-  version: 2;
+  version: 3;
   mission: Mission;
   statuses: Record<string, RuntimeStatus>;
   policies: OwnerPolicy[];
@@ -118,4 +134,15 @@ export interface PersistedRuntime {
   artifacts: ToolArtifact[];
   events: RuntimeEvent[];
   plannerMode: PlannerMode;
+}
+
+export interface OnlineToolResult {
+  provider: "online-research" | "telegram";
+  requestId: string;
+  summary: string;
+  content: string;
+  executedAt: string;
+  externalReference?: string;
+  evidence?: ToolArtifact["evidence"];
+  attestation: string;
 }

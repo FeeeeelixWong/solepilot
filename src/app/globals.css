@@ -686,6 +686,10 @@ h1 {
   color: #ffffff;
 }
 
+.button.approve:disabled {
+  background: #8ca99d;
+}
+
 .button.reject {
   border-color: #e7bab5;
   background: var(--surface);
@@ -878,6 +882,104 @@ h1 {
   font-size: 9px;
   line-height: 1.55;
   white-space: pre-wrap;
+}
+
+.artifact-proof,
+.artifact-attestation {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  color: var(--ink-muted);
+  font-size: 10px;
+}
+
+.artifact-proof > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.artifact-proof a,
+.evidence-list a {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--blue);
+  text-decoration: none;
+}
+
+.artifact-proof a,
+.artifact-proof code {
+  margin-left: auto;
+}
+
+.artifact-proof code,
+.artifact-attestation code {
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--font-mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.evidence-list {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.evidence-list a {
+  min-width: 0;
+  padding: 7px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+  font-size: 9px;
+  overflow-wrap: anywhere;
+}
+
+.evidence-list span {
+  flex: 0 0 auto;
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+}
+
+.owner-code-field {
+  display: grid;
+  gap: 7px;
+  margin: 12px 0;
+}
+
+.owner-code-field > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink-muted);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.owner-code-field input {
+  width: 100%;
+  min-height: 40px;
+  padding: 0 11px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.owner-code-field small {
+  color: var(--ink-faint);
+  font-size: 9px;
+  line-height: 1.4;
 }
 
 .runtime-trace {

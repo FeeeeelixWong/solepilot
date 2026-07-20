@@ -1,6 +1,6 @@
 import type { PersistedRuntime } from "./types";
 
-export const RUNTIME_STORAGE_KEY = "solepilot.runtime.v2";
+export const RUNTIME_STORAGE_KEY = "solepilot.runtime.v3";
 
 export function loadRuntime(): PersistedRuntime | null {
   if (typeof window === "undefined") return null;
@@ -10,7 +10,7 @@ export function loadRuntime(): PersistedRuntime | null {
     if (!raw) return null;
     const parsed = JSON.parse(raw) as PersistedRuntime;
     if (
-      parsed.version !== 2 ||
+      parsed.version !== 3 ||
       !parsed.mission?.id ||
       !Array.isArray(parsed.mission.actions) ||
       !Array.isArray(parsed.receipts) ||

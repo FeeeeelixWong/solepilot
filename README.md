@@ -4,7 +4,9 @@ SolePilot is a governed agent runtime for one-person companies. An AI planner
 turns an owner objective into tool calls; a deterministic policy engine then
 allows, pauses, or blocks every call before it reaches an execution adapter.
 
-**Live product:** https://feeeeelixwong.github.io/solepilot/
+**Online product:** https://solepilot.vercel.app
+
+**Replay mirror:** https://feeeeelixwong.github.io/solepilot/
 
 ## The problem
 
@@ -24,27 +26,33 @@ SolePilot separates planning from authority:
 
 ## Judge path
 
-The public demo offers two planner modes:
+The public demo offers two runtime modes:
 
 - **Replay** is a deterministic, zero-configuration run. It requires no account
   or API key and exercises `ALLOW`, `REVIEW`, and `BLOCK` paths.
-- **Live AI** asks a Puter-hosted OpenAI model to generate a new typed plan from
-  the owner's objective. Puter's user-pays session keeps model credentials out
-  of the application and may request a Puter sign-in.
+- **Online agent** asks a Puter-hosted OpenAI model to generate a typed plan,
+  retrieves current external evidence through server-side research adapters,
+  produces a scoped artifact, and pauses before a real Telegram delivery.
+  Delivery requires the owner's connector code and returns a real
+  provider message ID.
 
 For the shortest complete run:
 
-1. Select **Run mission**.
+1. Select **Run mission** for the zero-configuration policy walkthrough.
 2. Inspect the research and drafting artifacts.
 3. Approve the paused sandbox outbox call, then continue.
 4. Approve the in-budget sandbox reservation, then continue.
 5. Observe the over-cap reservation fail before invocation.
 6. Open **Receipt ledger** and select **Verify chain**.
-7. Create a custom mission to compare Replay with Live AI planning.
+7. Create a custom mission and select **Online agent**.
+8. Inspect live evidence URLs and the server-attested research request.
+9. At the delivery boundary, enter the owner connector code and approve.
+10. Inspect the Telegram message ID, provider reference, and sealed receipt.
 
-External messages, commitments, and payments intentionally use sandbox
-adapters in this public build. The runtime proves authorization and execution
-ordering without creating unintended real-world side effects.
+Replay external actions remain sandboxed by design. Online missions use a fixed
+Telegram destination protected by a server-side owner code. Spending remains
+blocked or sandbox-authorized; SolePilot does not expose a payment credential
+to the planner.
 
 ## Runtime architecture
 
@@ -58,7 +66,7 @@ flowchart LR
   A -->|approve| T
   A -->|reject| R[Rejected receipt]
   G -->|BLOCK| B[Blocked receipt]
-  T --> F[Tool artifact]
+  T --> F[Online provider or local artifact]
   F --> H[Hash-linked receipt]
   R --> H
   B --> H
@@ -75,6 +83,9 @@ and the production replacement plan.
 
 - Custom mission composition with configurable stakeholder, deadline, and cap
 - Keyless Live AI planner through Puter.js
+- Server-side online research using Wikipedia and Hacker News
+- Real owner-approved Telegram delivery through a fixed-destination connector
+- Provider request IDs, evidence URLs, message IDs, and HMAC attestations
 - Deterministic Replay planner for reliable evaluation
 - Typed tools for workspace search, document composition, outbox delivery,
   commitments, and budget reservation
@@ -84,6 +95,7 @@ and the production replacement plan.
 - Local persistence across refreshes
 - Hash-linked receipts with artifact digests and JSON export
 - In-browser receipt-chain verification
+- Production Next.js API runtime deployed on Vercel
 - Responsive keyboard-accessible workspace
 
 ## Verification
@@ -115,7 +127,19 @@ npm run dev
 ```
 
 Open http://localhost:3000. Replay mode works offline after the application has
-loaded. Live AI requires network access to Puter.js.
+loaded. Online Agent requires network access to Puter.js and the research APIs.
+
+To enable real Telegram delivery, copy `.env.example` to `.env.local` and set:
+
+```bash
+TELEGRAM_BOT_TOKEN=...
+TELEGRAM_CHAT_ID=...
+SOLEPILOT_OWNER_CODE=...
+SOLEPILOT_ATTESTATION_SECRET=...
+```
+
+The bot token and destination never reach the browser. The owner code is sent
+only when an owner releases a paused action and is not stored in local storage.
 
 ## BUIDL_QUESTS 2026
 

@@ -15,6 +15,7 @@ export const demoMission: Mission = {
   ...demoDraft,
   status: "ready",
   planSource: "replay",
+  executionMode: "sandbox",
   plannerModel: "SolePilot reference planner v1",
   actions: [
     {

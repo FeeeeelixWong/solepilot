@@ -41,9 +41,13 @@ export async function digestArtifact(
   return sha256(
     canonicalize({
       actionId: artifact.actionId,
+      attestation: artifact.attestation ?? null,
       content: artifact.content,
+      evidence: artifact.evidence ?? [],
+      externalReference: artifact.externalReference ?? null,
       missionId: artifact.missionId,
       provider: artifact.provider,
+      requestId: artifact.requestId ?? null,
       summary: artifact.summary,
       toolName: artifact.toolName,
     }),
@@ -84,6 +88,7 @@ export async function createReceipt(
       budgetCapUsd: mission.budgetCapUsd,
       id: mission.id,
       objective: mission.objective,
+      executionMode: mission.executionMode,
       planSource: mission.planSource,
     },
     previousReceiptId,

@@ -9,11 +9,14 @@ import {
   CheckCircle2,
   ChevronRight,
   Circle,
+  Cloud,
   Clock3,
   Download,
+  ExternalLink,
   FileCheck2,
   FileJson,
   LockKeyhole,
+  KeyRound,
   Play,
   Plus,
   ReceiptText,
@@ -36,6 +39,7 @@ import { evaluateAction, ownerPolicies } from "@/lib/policy";
 import { createReceipt, verifyReceiptChain } from "@/lib/receipt";
 import { loadRuntime, saveRuntime } from "@/lib/storage";
 import { executeGovernedAction } from "@/lib/tools";
+import { getRuntimeHealth, type RuntimeHealth } from "@/lib/online";
 import type {
   ActionOutcome,
   AgentAction,
@@ -122,6 +126,8 @@ export function MissionControl() {
   const [verification, setVerification] = useState<Verification>(null);
   const [hydrated, setHydrated] = useState(false);
   const [announcement, setAnnouncement] = useState("Mission ready.");
+  const [runtimeHealth, setRuntimeHealth] = useState<RuntimeHealth | null>(null);
+  const [ownerCode, setOwnerCode] = useState("");
   const receiptRef = useRef<RuntimeReceipt[]>([]);
   const artifactRef = useRef<ToolArtifact[]>([]);
 
@@ -151,9 +157,23 @@ export function MissionControl() {
   }, []);
 
   useEffect(() => {
+    let active = true;
+    getRuntimeHealth()
+      .then((health) => {
+        if (active) setRuntimeHealth(health);
+      })
+      .catch(() => {
+        if (active) setRuntimeHealth(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
     if (!hydrated) return;
     saveRuntime({
-      version: 2,
+      version: 3,
       mission,
       statuses,
       policies,
@@ -371,6 +391,7 @@ export function MissionControl() {
         policies,
         previousArtifacts: artifactRef.current,
         authorization: "owner-approved",
+        ownerCode,
       });
       commitArtifact(artifact);
       setStatuses((current) => ({ ...current, [actionId]: "complete" }));
@@ -397,6 +418,7 @@ export function MissionControl() {
     artifactRef.current = [];
     setSelectedActionId(mission.actions[0]?.id ?? "");
     setVerification(null);
+    setOwnerCode("");
     setAnnouncement("Mission reset. The policy runtime is ready.");
     setView("mission");
   }
@@ -433,6 +455,7 @@ export function MissionControl() {
     receiptRef.current = [];
     artifactRef.current = [];
     setVerification(null);
+    setOwnerCode("");
     setComposerOpen(false);
     setView("mission");
     setAnnouncement("A new governed agent plan is ready.");
@@ -473,8 +496,8 @@ export function MissionControl() {
         <div className="runtime-identity">
           <span className="status-dot" />
           <div>
-            <p>{mission.planSource === "live-ai" ? "Live AI runtime" : "Replay runtime"}</p>
-            <span>{mission.plannerModel}</span>
+            <p>{mission.executionMode === "online" ? "Online agent runtime" : "Replay runtime"}</p>
+            <span>{mission.executionMode === "online" ? `${runtimeHealth?.version ?? "checking"} / server tools` : mission.plannerModel}</span>
           </div>
         </div>
         <div className="owner-card">
@@ -493,9 +516,11 @@ export function MissionControl() {
             <h1>{view === "mission" ? mission.title : navItems.find((item) => item.id === view)?.label}</h1>
           </div>
           <div className="topbar-actions">
-            <span className="runtime-badge live" data-live={mission.planSource === "live-ai"}>
-              {mission.planSource === "live-ai" ? <Sparkles size={13} /> : <FileJson size={13} />}
-              {mission.planSource === "live-ai" ? "Live AI" : "Replay"}
+            <span className="runtime-badge live" data-live={mission.executionMode === "online"}>
+              {mission.executionMode === "online" ? <Cloud size={13} /> : <FileJson size={13} />}
+              {mission.executionMode === "online"
+                ? runtimeHealth?.telegram ? "Online · ready" : "Online · limited"
+                : "Replay"}
             </span>
             <button className="button secondary icon-command" onClick={() => setComposerOpen(true)} title="New mission" type="button">
               <Plus aria-hidden="true" size={17} />
@@ -534,11 +559,14 @@ export function MissionControl() {
             evaluations={evaluations}
             events={events}
             mission={mission}
+            onOwnerCodeChange={setOwnerCode}
             onResolveReview={resolveOwnerReview}
             onSelect={setSelectedActionId}
             policies={policies}
             selectedAction={selectedAction}
             statuses={statuses}
+            ownerCode={ownerCode}
+            runtimeHealth={runtimeHealth}
             waitingAction={waitingAction}
           />
         ) : null}
@@ -581,11 +609,14 @@ function MissionView({
   evaluations,
   events,
   mission,
+  onOwnerCodeChange,
   onResolveReview,
   onSelect,
   policies,
   selectedAction,
   statuses,
+  ownerCode,
+  runtimeHealth,
   waitingAction,
 }: {
   artifacts: ToolArtifact[];
@@ -593,11 +624,14 @@ function MissionView({
   evaluations: Record<string, ReturnType<typeof evaluateAction>>;
   events: RuntimeEvent[];
   mission: Mission;
+  onOwnerCodeChange: (value: string) => void;
   onResolveReview: (actionId: string, outcome: "approve" | "reject") => void;
   onSelect: (actionId: string) => void;
   policies: OwnerPolicy[];
   selectedAction: AgentAction;
   statuses: Record<string, RuntimeStatus>;
+  ownerCode: string;
+  runtimeHealth: RuntimeHealth | null;
   waitingAction?: AgentAction;
 }) {
   const selectedEvaluation = evaluations[selectedAction.id];
@@ -610,7 +644,7 @@ function MissionView({
         <div className="metric-band">
           <Metric label="Stakeholder" value={mission.customer} />
           <Metric label="Budget cap" value={`$${mission.budgetCapUsd}`} />
-          <Metric label="Planner" value={mission.planSource === "live-ai" ? "Puter AI" : "Reference"} />
+          <Metric label="Runtime" value={mission.executionMode === "online" ? "Online agent" : "Safe replay"} />
           <Metric label="Progress" value={`${completedCount}/${mission.actions.length} outcomes`} />
         </div>
 
@@ -680,14 +714,57 @@ function MissionView({
             </div>
             <p>{selectedArtifact.summary}</p>
             <pre>{selectedArtifact.content}</pre>
+            {selectedArtifact.externalReference ? (
+              <div className="artifact-proof">
+                <span><Cloud size={13} /> Provider reference</span>
+                {selectedArtifact.externalReference.startsWith("http") ? (
+                  <a href={selectedArtifact.externalReference} rel="noreferrer" target="_blank">
+                    Open evidence <ExternalLink size={12} />
+                  </a>
+                ) : <code>{selectedArtifact.externalReference}</code>}
+              </div>
+            ) : null}
+            {selectedArtifact.evidence?.length ? (
+              <div className="evidence-list">
+                {selectedArtifact.evidence.map((item) => (
+                  <a href={item.url} key={item.url} rel="noreferrer" target="_blank">
+                    <span>{item.source}</span>{item.title}<ExternalLink size={11} />
+                  </a>
+                ))}
+              </div>
+            ) : null}
+            {selectedArtifact.attestation ? (
+              <div className="artifact-attestation">
+                <ShieldCheck size={13} />
+                <code>{selectedArtifact.attestation.slice(0, 28)}...</code>
+              </div>
+            ) : null}
           </div>
         ) : null}
 
         {waitingAction?.id === selectedAction.id ? (
           <div className="approval-actions">
             <p>{selectedAction.toolName} is paused at the owner boundary.</p>
+            {mission.executionMode === "online" && selectedAction.toolName === "outbox.send" ? (
+              <label className="owner-code-field">
+                <span><KeyRound size={13} /> Owner connector code</span>
+                <input
+                  autoComplete="one-time-code"
+                  onChange={(event) => onOwnerCodeChange(event.target.value)}
+                  placeholder={runtimeHealth?.telegram ? "Required for live delivery" : "Connector not configured"}
+                  type="password"
+                  value={ownerCode}
+                />
+                <small>The code releases one fixed-destination Telegram connector. It is never persisted.</small>
+              </label>
+            ) : null}
             <div>
-              <button className="button approve" onClick={() => onResolveReview(selectedAction.id, "approve")} type="button">
+              <button
+                className="button approve"
+                disabled={mission.executionMode === "online" && selectedAction.toolName === "outbox.send" && (!runtimeHealth?.telegram || !ownerCode)}
+                onClick={() => onResolveReview(selectedAction.id, "approve")}
+                type="button"
+              >
                 <Check aria-hidden="true" size={16} />Approve
               </button>
               <button className="button reject" onClick={() => onResolveReview(selectedAction.id, "reject")} type="button">
@@ -945,7 +1022,7 @@ function MissionComposer({ initialDraft, initialMode, onClose, onCreate }: {
               <FileJson size={17} /><span><strong>Replay</strong><small>Zero-config reference run</small></span>
             </button>
             <button data-active={mode === "live-ai"} onClick={() => setMode("live-ai")} type="button">
-              <BrainCircuit size={17} /><span><strong>Live AI</strong><small>Keyless Puter model session</small></span>
+              <BrainCircuit size={17} /><span><strong>Online agent</strong><small>Live research, AI work, governed delivery</small></span>
             </button>
           </fieldset>
 
@@ -955,7 +1032,7 @@ function MissionComposer({ initialDraft, initialMode, onClose, onCreate }: {
             <button className="button secondary" onClick={close} type="button">Cancel</button>
             <button className="button primary create-plan" disabled={isPlanning} type="submit">
               {isPlanning ? <Clock3 size={16} /> : mode === "live-ai" ? <Sparkles size={16} /> : <Play size={16} />}
-              {isPlanning ? "Planning" : "Create agent plan"}
+              {isPlanning ? "Planning" : mode === "live-ai" ? "Launch online agent" : "Create replay plan"}
             </button>
           </footer>
         </form>

@@ -82,7 +82,8 @@ test("live planner normalizes model JSON into governed tool calls", async () => 
   );
 
   assert.equal(mission.planSource, "live-ai");
-  assert.equal(mission.actions[0].toolName, "workspace.search");
+  assert.equal(mission.executionMode, "online");
+  assert.equal(mission.actions[0].toolName, "web.search");
   assert.equal(mission.actions[2].toolName, "outbox.send");
 });
 
@@ -139,6 +140,51 @@ test("owner authorization releases a reviewed sandbox tool", async () => {
 
   assert.equal(artifact.provider, "sandbox");
   assert.match(artifact.content, /No live message was sent/);
+});
+
+test("online research seals provider evidence into the artifact", async () => {
+  const action = { ...demoMission.actions[0], toolName: "web.search" as const };
+  const mission = {
+    ...demoMission,
+    executionMode: "online" as const,
+    planSource: "live-ai" as const,
+    actions: [action],
+  };
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input) => {
+    if (String(input).includes("/api/attestations/verify")) {
+      return new Response(JSON.stringify({ valid: true }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    return new Response(JSON.stringify({
+      provider: "online-research",
+      requestId: "research_test",
+      summary: "Retrieved one live source.",
+      content: "LIVE RESEARCH EVIDENCE",
+      executedAt: "2026-07-20T00:00:00.000Z",
+      externalReference: "https://example.com/evidence",
+      evidence: [{ title: "Evidence", url: "https://example.com/evidence", source: "Test" }],
+      attestation: "sp_hmac_test",
+    }), { status: 200, headers: { "Content-Type": "application/json" } });
+  };
+
+  try {
+    const { artifact } = await executeGovernedAction({
+      action,
+      mission,
+      mode: "live-ai",
+      policies: [],
+      previousArtifacts: [],
+    });
+    assert.equal(artifact.provider, "online-research");
+    assert.equal(artifact.requestId, "research_test");
+    assert.equal(artifact.evidence?.[0].source, "Test");
+    assert.equal(artifact.attestation, "sp_hmac_test");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test("receipt verification detects a broken chain", async () => {
