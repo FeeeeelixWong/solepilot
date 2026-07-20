@@ -32,8 +32,10 @@ function missionId(): string {
 }
 
 function titleFromObjective(objective: string): string {
-  const words = objective.replace(/[.!?]+$/g, "").split(/\s+/).slice(0, 9);
-  const title = words.join(" ");
+  const cleaned = objective.replace(/[.!?]+$/g, "").replace(/\s+/g, " ").trim();
+  const title = cleaned.length > 78
+    ? `${cleaned.slice(0, 75).trimEnd()}...`
+    : cleaned;
   return title.charAt(0).toUpperCase() + title.slice(1);
 }
 
@@ -214,13 +216,58 @@ function responseText(response: unknown): string {
 }
 
 export const puterChat: ChatCompletion = async (prompt) => {
-  if (typeof window === "undefined" || !window.puter?.ai?.chat) {
-    throw new Error("Live AI is still loading. Try again in a moment.");
+  if (typeof window === "undefined") {
+    throw new Error("Live AI is available only in the browser.");
   }
 
-  const response = await window.puter.ai.chat(prompt, { model: LIVE_MODEL });
-  return responseText(response);
+  if (!window.puter?.ai?.chat) await loadPuter();
+  if (!window.puter?.ai?.chat) throw new Error("Live AI could not be loaded.");
+
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const timeout = new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(
+        () => reject(new Error("Live AI timed out. Reopen the planner and try again.")),
+        60_000,
+      );
+    });
+    const response = await Promise.race([
+      window.puter.ai.chat(prompt, { model: LIVE_MODEL }),
+      timeout,
+    ]);
+    return responseText(response);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
 };
+
+let puterLoad: Promise<void> | null = null;
+
+function loadPuter(): Promise<void> {
+  if (window.puter?.ai?.chat) return Promise.resolve();
+  if (puterLoad) return puterLoad;
+
+  puterLoad = new Promise((resolve, reject) => {
+    const existing = document.querySelector<HTMLScriptElement>(
+      'script[data-solepilot-puter="true"]',
+    );
+    if (existing) {
+      existing.addEventListener("load", () => resolve(), { once: true });
+      existing.addEventListener("error", () => reject(new Error("Puter.js failed to load.")), { once: true });
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src = "https://js.puter.com/v2/";
+    script.async = true;
+    script.dataset.solepilotPuter = "true";
+    script.addEventListener("load", () => resolve(), { once: true });
+    script.addEventListener("error", () => reject(new Error("Puter.js failed to load.")), { once: true });
+    document.head.append(script);
+  });
+
+  return puterLoad;
+}
 
 export async function planMission(
   draft: MissionDraft,

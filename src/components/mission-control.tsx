@@ -63,8 +63,8 @@ const actionIcons: Record<AgentAction["kind"], typeof Search> = {
 
 const navItems: Array<{ id: View; label: string; icon: typeof Activity }> = [
   { id: "mission", label: "Mission", icon: Activity },
-  { id: "policies", label: "Owner policies", icon: ShieldCheck },
-  { id: "receipts", label: "Receipt ledger", icon: ReceiptText },
+  { id: "policies", label: "Policies", icon: ShieldCheck },
+  { id: "receipts", label: "Ledger", icon: ReceiptText },
 ];
 
 const delay = (duration: number) =>
@@ -410,8 +410,13 @@ export function MissionControl() {
     resetRuntime();
   }
 
-  async function createMission(draft: MissionDraft, mode: PlannerMode) {
+  async function createMission(
+    draft: MissionDraft,
+    mode: PlannerMode,
+    signal: AbortSignal,
+  ) {
     const nextMission = await planMission(draft, mode);
+    if (signal.aborted) return;
     const nextStatuses = statusesFor(nextMission);
     const event = newEvent(
       mode === "live-ai" ? "AI PLAN CREATED" : "REPLAY PLAN CREATED",
@@ -741,7 +746,7 @@ function RuntimeTrace({ events }: { events: RuntimeEvent[] }) {
     <div className="runtime-trace">
       <div className="trace-heading">
         <span><Activity size={14} /> Runtime trace</span>
-        <code>{events.length} events</code>
+        <code>{events.length} {events.length === 1 ? "event" : "events"}</code>
       </div>
       {visible.length === 0 ? <p className="trace-empty">No runtime events.</p> : (
         <div className="trace-list">
@@ -868,20 +873,27 @@ function MissionComposer({ initialDraft, initialMode, onClose, onCreate }: {
   initialDraft: MissionDraft;
   initialMode: PlannerMode;
   onClose: () => void;
-  onCreate: (draft: MissionDraft, mode: PlannerMode) => Promise<void>;
+  onCreate: (draft: MissionDraft, mode: PlannerMode, signal: AbortSignal) => Promise<void>;
 }) {
   const [draft, setDraft] = useState(initialDraft);
   const [mode, setMode] = useState(initialMode);
   const [isPlanning, setIsPlanning] = useState(false);
   const [error, setError] = useState("");
+  const abortController = useRef(new AbortController());
+
+  function close() {
+    abortController.current.abort();
+    onClose();
+  }
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
     setIsPlanning(true);
     try {
-      await onCreate(draft, mode);
+      await onCreate(draft, mode, abortController.current.signal);
     } catch (caught) {
+      if (abortController.current.signal.aborted) return;
       setError(caught instanceof Error ? caught.message : "The planner could not create this mission.");
       setIsPlanning(false);
     }
@@ -895,7 +907,7 @@ function MissionComposer({ initialDraft, initialMode, onClose, onCreate }: {
             <p className="eyebrow">NEW GOVERNED RUNTIME</p>
             <h2 id="composer-title">Create a mission</h2>
           </div>
-          <button className="button secondary icon-only" onClick={onClose} title="Close" type="button"><X size={17} /></button>
+          <button className="button secondary icon-only" onClick={close} title="Close" type="button"><X size={17} /></button>
         </header>
 
         <form onSubmit={submit}>
@@ -940,7 +952,7 @@ function MissionComposer({ initialDraft, initialMode, onClose, onCreate }: {
           {error ? <div className="composer-error"><AlertTriangle size={16} />{error}</div> : null}
 
           <footer className="composer-footer">
-            <button className="button secondary" disabled={isPlanning} onClick={onClose} type="button">Cancel</button>
+            <button className="button secondary" onClick={close} type="button">Cancel</button>
             <button className="button primary create-plan" disabled={isPlanning} type="submit">
               {isPlanning ? <Clock3 size={16} /> : mode === "live-ai" ? <Sparkles size={16} /> : <Play size={16} />}
               {isPlanning ? "Planning" : "Create agent plan"}
