@@ -21,8 +21,8 @@
   --sidebar: #111a17;
   --sidebar-muted: #9eaaa5;
   --radius: 6px;
-  --font-sans: var(--font-geist-sans), Arial, sans-serif;
-  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --font-sans: Arial, sans-serif;
+  --font-mono: ui-monospace, monospace;
 }
 
 * {
@@ -30,11 +30,16 @@
 }
 
 html {
+  height: 100%;
   background: var(--bg);
 }
 
 body {
+  --font-sans: var(--font-geist-sans, Arial), sans-serif;
+  --font-mono: var(--font-geist-mono, ui-monospace), monospace;
+  height: 100%;
   margin: 0;
+  overflow: hidden;
   background: var(--bg);
   color: var(--ink);
   font-family: var(--font-sans);
@@ -75,7 +80,9 @@ textarea:focus-visible {
 .app-shell {
   display: grid;
   grid-template-columns: 236px minmax(0, 1fr);
-  min-height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .sidebar {
@@ -83,8 +90,13 @@ textarea:focus-visible {
   top: 0;
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
   padding: 24px 16px 16px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   background: var(--sidebar);
   color: #eef4f1;
 }
@@ -236,8 +248,14 @@ textarea:focus-visible {
 }
 
 .workspace {
+  height: 100dvh;
   min-width: 0;
   padding: 24px 32px 48px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  -webkit-overflow-scrolling: touch;
 }
 
 .topbar {
@@ -345,6 +363,7 @@ h1 {
 .mission-main,
 .inspector,
 .content-view {
+  min-width: 0;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface);
@@ -912,6 +931,7 @@ h1 {
 .trace-empty {
   color: var(--ink-muted);
   line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 
 .trace-row time {
@@ -1005,7 +1025,11 @@ h1 {
 }
 
 .mission-composer {
+  display: flex;
+  max-height: calc(100dvh - 48px);
   width: min(720px, 100%);
+  flex-direction: column;
+  overflow: hidden;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);
   background: var(--surface);
@@ -1028,6 +1052,11 @@ h1 {
 
 .mission-composer form {
   padding: 22px 24px 24px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  -webkit-overflow-scrolling: touch;
 }
 
 .form-grid {
@@ -1163,6 +1192,10 @@ h1 {
     grid-template-columns: 1fr 1fr;
   }
 
+  .inspector > * {
+    min-width: 0;
+  }
+
   .inspector-header,
   .approval-actions {
     grid-column: 1 / -1;
@@ -1170,14 +1203,29 @@ h1 {
 }
 
 @media (max-width: 760px) {
+  html,
+  body {
+    height: auto;
+    min-height: 100%;
+  }
+
+  body {
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
   .app-shell {
     display: block;
+    height: auto;
+    min-height: 100dvh;
+    overflow: visible;
   }
 
   .sidebar {
     position: static;
     height: auto;
     padding: 14px 16px;
+    overflow: visible;
   }
 
   .brand-mark {
@@ -1209,7 +1257,9 @@ h1 {
   }
 
   .workspace {
+    height: auto;
     padding: 20px 14px 36px;
+    overflow: visible;
   }
 
   .topbar {
@@ -1297,6 +1347,11 @@ h1 {
     grid-column: 2 / -1;
   }
 
+  .trace-row time {
+    grid-column: 3;
+    grid-row: 1;
+  }
+
   .ledger-intro {
     display: grid;
   }
@@ -1318,6 +1373,10 @@ h1 {
   .modal-backdrop {
     place-items: start center;
     padding: 10px;
+  }
+
+  .mission-composer {
+    max-height: calc(100dvh - 20px);
   }
 
   .composer-header,
