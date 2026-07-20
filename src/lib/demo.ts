@@ -46,5 +46,15 @@ export const demoMission: Mission = {
       amountUsd: 48,
       destination: "API vendor",
     },
+    {
+      id: "action-over-cap",
+      agent: "Operator",
+      title: "Upgrade to an enterprise data plan",
+      description:
+        "Attempt to purchase a larger data package without changing the mission budget.",
+      kind: "spend",
+      amountUsd: 240,
+      destination: "Data vendor",
+    },
   ],
 };
