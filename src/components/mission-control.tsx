@@ -2,51 +2,56 @@
 
 import {
   Activity,
+  AlertTriangle,
   Bot,
+  BrainCircuit,
   Check,
+  CheckCircle2,
   ChevronRight,
   Circle,
   Clock3,
+  Download,
   FileCheck2,
+  FileJson,
   LockKeyhole,
   Play,
+  Plus,
   ReceiptText,
   RotateCcw,
   Search,
   Send,
   Settings2,
   ShieldCheck,
+  Sparkles,
+  TerminalSquare,
   UserRoundCheck,
   WalletCards,
   X,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
-import { demoMission } from "@/lib/demo";
+import { demoDraft, demoMission } from "@/lib/demo";
+import { planMission } from "@/lib/planner";
 import { evaluateAction, ownerPolicies } from "@/lib/policy";
-import { createReceipt } from "@/lib/receipt";
+import { createReceipt, verifyReceiptChain } from "@/lib/receipt";
+import { loadRuntime, saveRuntime } from "@/lib/storage";
+import { executeGovernedAction } from "@/lib/tools";
 import type {
-  ActionReceipt,
+  ActionOutcome,
   AgentAction,
   Decision,
+  Mission,
+  MissionDraft,
   OwnerPolicy,
+  PlannerMode,
+  RuntimeEvent,
+  RuntimeReceipt,
+  RuntimeStatus,
+  ToolArtifact,
 } from "@/lib/types";
 
 type View = "mission" | "policies" | "receipts";
-type RuntimeStatus =
-  | "pending"
-  | "running"
-  | "awaiting-owner"
-  | "complete"
-  | "blocked";
-
-interface RuntimeReceipt extends ActionReceipt {
-  resultLabel: string;
-}
-
-const initialStatuses = Object.fromEntries(
-  demoMission.actions.map((action) => [action.id, "pending"]),
-) as Record<string, RuntimeStatus>;
+type Verification = { valid: boolean; checked: number; error?: string } | null;
 
 const actionIcons: Record<AgentAction["kind"], typeof Search> = {
   research: Search,
@@ -56,18 +61,20 @@ const actionIcons: Record<AgentAction["kind"], typeof Search> = {
   spend: WalletCards,
 };
 
-const navItems: Array<{
-  id: View;
-  label: string;
-  icon: typeof Activity;
-}> = [
+const navItems: Array<{ id: View; label: string; icon: typeof Activity }> = [
   { id: "mission", label: "Mission", icon: Activity },
   { id: "policies", label: "Owner policies", icon: ShieldCheck },
-  { id: "receipts", label: "Receipts", icon: ReceiptText },
+  { id: "receipts", label: "Receipt ledger", icon: ReceiptText },
 ];
 
 const delay = (duration: number) =>
   new Promise((resolve) => window.setTimeout(resolve, duration));
+
+function statusesFor(mission: Mission): Record<string, RuntimeStatus> {
+  return Object.fromEntries(
+    mission.actions.map((action) => [action.id, "pending"]),
+  ) as Record<string, RuntimeStatus>;
+}
 
 function decisionLabel(decision: Decision): string {
   if (decision === "allow") return "Delegated";
@@ -75,71 +82,190 @@ function decisionLabel(decision: Decision): string {
   return "Blocked";
 }
 
+function outcomeLabel(outcome: ActionOutcome): string {
+  if (outcome === "delegated") return "DELEGATED ALLOW";
+  if (outcome === "approved") return "OWNER APPROVED";
+  if (outcome === "rejected") return "OWNER REJECTED";
+  return "POLICY BLOCK";
+}
+
+function newEvent(
+  label: string,
+  detail: string,
+  tone: RuntimeEvent["tone"] = "neutral",
+  actionId?: string,
+): RuntimeEvent {
+  return {
+    id: `event-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    actionId,
+    tone,
+    label,
+    detail,
+    createdAt: new Date().toISOString(),
+  };
+}
+
 export function MissionControl() {
   const [view, setView] = useState<View>("mission");
-  const [statuses, setStatuses] =
-    useState<Record<string, RuntimeStatus>>(initialStatuses);
+  const [mission, setMission] = useState<Mission>(demoMission);
+  const [statuses, setStatuses] = useState<Record<string, RuntimeStatus>>(
+    statusesFor(demoMission),
+  );
   const [policies, setPolicies] = useState<OwnerPolicy[]>(ownerPolicies);
-  const [selectedActionId, setSelectedActionId] = useState(
-    demoMission.actions[0].id,
-  );
+  const [selectedActionId, setSelectedActionId] = useState(demoMission.actions[0].id);
   const [receipts, setReceipts] = useState<RuntimeReceipt[]>([]);
+  const [artifacts, setArtifacts] = useState<ToolArtifact[]>([]);
+  const [events, setEvents] = useState<RuntimeEvent[]>([]);
+  const [plannerMode, setPlannerMode] = useState<PlannerMode>("replay");
   const [isRunning, setIsRunning] = useState(false);
-  const [announcement, setAnnouncement] = useState(
-    "Mission ready. Run the agent plan when you are ready.",
-  );
+  const [composerOpen, setComposerOpen] = useState(false);
+  const [verification, setVerification] = useState<Verification>(null);
+  const [hydrated, setHydrated] = useState(false);
+  const [announcement, setAnnouncement] = useState("Mission ready.");
+  const receiptRef = useRef<RuntimeReceipt[]>([]);
+  const artifactRef = useRef<ToolArtifact[]>([]);
+
+  useEffect(() => {
+    const saved = loadRuntime();
+    if (saved) {
+      setMission(saved.mission);
+      setStatuses(saved.statuses);
+      setPolicies(saved.policies);
+      setReceipts(saved.receipts);
+      setArtifacts(saved.artifacts);
+      setEvents(saved.events);
+      setPlannerMode(saved.plannerMode);
+      setSelectedActionId(saved.mission.actions[0]?.id ?? "");
+      receiptRef.current = saved.receipts;
+      artifactRef.current = saved.artifacts;
+      setAnnouncement("Restored the last governed runtime from this browser.");
+    } else {
+      const event = newEvent(
+        "MISSION READY",
+        "Reference plan loaded with zero-config replay.",
+        "success",
+      );
+      setEvents([event]);
+    }
+    setHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    saveRuntime({
+      version: 2,
+      mission,
+      statuses,
+      policies,
+      receipts,
+      artifacts,
+      events,
+      plannerMode,
+    });
+  }, [artifacts, events, hydrated, mission, plannerMode, policies, receipts, statuses]);
 
   const evaluations = useMemo(
     () =>
       Object.fromEntries(
-        demoMission.actions.map((action) => [
+        mission.actions.map((action) => [
           action.id,
-          evaluateAction(action, demoMission, policies),
+          evaluateAction(action, mission, policies),
         ]),
       ),
-    [policies],
+    [mission, policies],
   );
   const selectedAction =
-    demoMission.actions.find((action) => action.id === selectedActionId) ??
-    demoMission.actions[0];
-  const selectedEvaluation = evaluations[selectedAction.id];
-  const waitingAction = demoMission.actions.find(
+    mission.actions.find((action) => action.id === selectedActionId) ??
+    mission.actions[0];
+  const waitingAction = mission.actions.find(
     (action) => statuses[action.id] === "awaiting-owner",
   );
   const completedCount = Object.values(statuses).filter(
     (status) => status === "complete" || status === "blocked",
   ).length;
-  const missionIsComplete = completedCount === demoMission.actions.length;
+  const missionIsComplete =
+    mission.actions.length > 0 && completedCount === mission.actions.length;
 
-  async function addReceipt(action: AgentAction, resultLabel: string) {
-    const evaluation = evaluations[action.id];
-    const receipt = await createReceipt(demoMission, evaluation);
-    setReceipts((current) => [
-      ...current,
-      { ...receipt, resultLabel },
-    ]);
+  function appendEvent(event: RuntimeEvent) {
+    setEvents((current) => [...current, event].slice(-24));
+  }
+
+  function commitArtifact(artifact: ToolArtifact) {
+    const next = [...artifactRef.current, artifact];
+    artifactRef.current = next;
+    setArtifacts(next);
+  }
+
+  async function issueReceipt(
+    action: AgentAction,
+    outcome: ActionOutcome,
+    artifact?: ToolArtifact,
+  ) {
+    const evaluation = evaluateAction(action, mission, policies);
+    const previous = receiptRef.current.at(-1)?.id ?? null;
+    const receipt = await createReceipt(
+      mission,
+      evaluation,
+      outcome,
+      previous,
+      receiptRef.current.length + 1,
+      artifact,
+    );
+    const runtimeReceipt = { ...receipt, resultLabel: outcomeLabel(outcome) };
+    const next = [...receiptRef.current, runtimeReceipt];
+    receiptRef.current = next;
+    setReceipts(next);
+    setVerification(null);
+    appendEvent(
+      newEvent(
+        "RECEIPT COMMITTED",
+        `${receipt.id} linked at sequence ${receipt.sequence}.`,
+        outcome === "blocked" || outcome === "rejected" ? "blocked" : "success",
+        action.id,
+      ),
+    );
   }
 
   async function runMission() {
-    if (isRunning || waitingAction) return;
+    if (isRunning || waitingAction || missionIsComplete) return;
 
     setIsRunning(true);
     const localStatuses = { ...statuses };
 
-    for (const action of demoMission.actions) {
+    for (const action of mission.actions) {
       if (localStatuses[action.id] !== "pending") continue;
 
-      const evaluation = evaluations[action.id];
+      const evaluation = evaluateAction(action, mission, policies);
       setSelectedActionId(action.id);
       localStatuses[action.id] = "running";
       setStatuses({ ...localStatuses });
-      setAnnouncement(`${action.agent} is evaluating ${action.title}.`);
-      await delay(520);
+      setAnnouncement(`${action.agent} proposed ${action.title}.`);
+      appendEvent(
+        newEvent(
+          "POLICY EVALUATION",
+          `${action.toolName} requested by ${action.agent}: ${evaluation.decision.toUpperCase()}.`,
+          evaluation.decision === "review"
+            ? "review"
+            : evaluation.decision === "block"
+              ? "blocked"
+              : "neutral",
+          action.id,
+        ),
+      );
+      await delay(420);
 
       if (evaluation.decision === "review") {
         localStatuses[action.id] = "awaiting-owner";
         setStatuses({ ...localStatuses });
-        setAnnouncement(`${action.title} requires your approval.`);
+        setAnnouncement(`${action.title} is waiting for owner approval.`);
+        appendEvent(
+          newEvent(
+            "TOOL PAUSED",
+            `${action.toolName} was not invoked. Owner decision required.`,
+            "review",
+            action.id,
+          ),
+        );
         setIsRunning(false);
         return;
       }
@@ -147,69 +273,171 @@ export function MissionControl() {
       if (evaluation.decision === "block") {
         localStatuses[action.id] = "blocked";
         setStatuses({ ...localStatuses });
-        await addReceipt(action, "POLICY BLOCK");
-        setAnnouncement(`${action.title} was blocked by the budget policy.`);
-        await delay(360);
+        appendEvent(
+          newEvent(
+            "TOOL BLOCKED",
+            `${action.toolName} was prevented before invocation.`,
+            "blocked",
+            action.id,
+          ),
+        );
+        await issueReceipt(action, "blocked");
+        await delay(280);
         continue;
       }
 
-      localStatuses[action.id] = "complete";
-      setStatuses({ ...localStatuses });
-      await addReceipt(action, "DELEGATED ALLOW");
-      setAnnouncement(`${action.title} completed within delegated authority.`);
-      await delay(360);
+      try {
+        appendEvent(
+          newEvent(
+            "TOOL INVOKED",
+            `${action.toolName} entered the governed execution adapter.`,
+            "neutral",
+            action.id,
+          ),
+        );
+        const { artifact } = await executeGovernedAction({
+          action,
+          mission,
+          mode: mission.planSource,
+          policies,
+          previousArtifacts: artifactRef.current,
+        });
+        commitArtifact(artifact);
+        localStatuses[action.id] = "complete";
+        setStatuses({ ...localStatuses });
+        await issueReceipt(action, "delegated", artifact);
+        setAnnouncement(`${action.title} completed inside delegated authority.`);
+      } catch (error) {
+        localStatuses[action.id] = "pending";
+        setStatuses({ ...localStatuses });
+        const message = error instanceof Error ? error.message : "The tool call failed.";
+        appendEvent(newEvent("RUNTIME ERROR", message, "blocked", action.id));
+        setAnnouncement(message);
+        setIsRunning(false);
+        return;
+      }
+      await delay(280);
     }
 
-    setAnnouncement("Mission complete. Every action has an auditable outcome.");
+    setAnnouncement("Mission complete. Every proposed action has a governed outcome.");
+    appendEvent(
+      newEvent(
+        "MISSION COMPLETE",
+        "The runtime reached a terminal outcome for every action.",
+        "success",
+      ),
+    );
     setIsRunning(false);
   }
 
-  function resolveOwnerReview(
+  async function resolveOwnerReview(
     actionId: string,
     outcome: "approve" | "reject",
   ) {
-    const action = demoMission.actions.find(
-      (candidate) => candidate.id === actionId,
-    );
-    if (!action || statuses[actionId] !== "awaiting-owner") return;
+    const action = mission.actions.find((candidate) => candidate.id === actionId);
+    if (!action || statuses[actionId] !== "awaiting-owner" || isRunning) return;
 
-    const status = outcome === "approve" ? "complete" : "blocked";
-    setStatuses((current) => ({ ...current, [actionId]: status }));
-    setAnnouncement(
-      `${action.title} was ${outcome === "approve" ? "approved" : "rejected"} by the owner.`,
+    setIsRunning(true);
+    if (outcome === "reject") {
+      setStatuses((current) => ({ ...current, [actionId]: "blocked" }));
+      appendEvent(
+        newEvent(
+          "OWNER REJECTED",
+          `${action.toolName} remained unexecuted.`,
+          "blocked",
+          action.id,
+        ),
+      );
+      await issueReceipt(action, "rejected");
+      setAnnouncement(`${action.title} was rejected. Continue when ready.`);
+      setIsRunning(false);
+      return;
+    }
+
+    setStatuses((current) => ({ ...current, [actionId]: "running" }));
+    appendEvent(
+      newEvent(
+        "OWNER APPROVED",
+        `${action.toolName} was released to the governed adapter.`,
+        "success",
+        action.id,
+      ),
     );
-    void addReceipt(
-      action,
-      outcome === "approve" ? "OWNER APPROVED" : "OWNER REJECTED",
-    );
+    try {
+      const { artifact } = await executeGovernedAction({
+        action,
+        mission,
+        mode: mission.planSource,
+        policies,
+        previousArtifacts: artifactRef.current,
+        authorization: "owner-approved",
+      });
+      commitArtifact(artifact);
+      setStatuses((current) => ({ ...current, [actionId]: "complete" }));
+      await issueReceipt(action, "approved", artifact);
+      setAnnouncement(`${action.title} was approved and executed. Continue when ready.`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "The approved tool call failed.";
+      setStatuses((current) => ({ ...current, [actionId]: "awaiting-owner" }));
+      appendEvent(newEvent("RUNTIME ERROR", message, "blocked", action.id));
+      setAnnouncement(message);
+    }
+    setIsRunning(false);
   }
 
-  function resetDemo() {
-    setStatuses(initialStatuses);
+  function resetRuntime() {
+    const nextStatuses = statusesFor(mission);
+    setStatuses(nextStatuses);
     setReceipts([]);
-    setSelectedActionId(demoMission.actions[0].id);
-    setAnnouncement("Mission reset. The policy engine is ready.");
+    setArtifacts([]);
+    setEvents([
+      newEvent("MISSION RESET", "Execution state cleared; the plan and owner policies remain.", "neutral"),
+    ]);
+    receiptRef.current = [];
+    artifactRef.current = [];
+    setSelectedActionId(mission.actions[0]?.id ?? "");
+    setVerification(null);
+    setAnnouncement("Mission reset. The policy runtime is ready.");
     setView("mission");
   }
 
   function togglePolicy(policyId: string) {
     setPolicies((current) =>
       current.map((policy) =>
-        policy.id === policyId
-          ? { ...policy, enabled: !policy.enabled }
-          : policy,
+        policy.id === policyId ? { ...policy, enabled: !policy.enabled } : policy,
       ),
     );
-    resetDemo();
+    resetRuntime();
+  }
+
+  async function createMission(draft: MissionDraft, mode: PlannerMode) {
+    const nextMission = await planMission(draft, mode);
+    const nextStatuses = statusesFor(nextMission);
+    const event = newEvent(
+      mode === "live-ai" ? "AI PLAN CREATED" : "REPLAY PLAN CREATED",
+      `${nextMission.actions.length} tool calls proposed by ${nextMission.plannerModel}.`,
+      "success",
+    );
+    setMission(nextMission);
+    setStatuses(nextStatuses);
+    setReceipts([]);
+    setArtifacts([]);
+    setEvents([event]);
+    setPlannerMode(mode);
+    setSelectedActionId(nextMission.actions[0]?.id ?? "");
+    receiptRef.current = [];
+    artifactRef.current = [];
+    setVerification(null);
+    setComposerOpen(false);
+    setView("mission");
+    setAnnouncement("A new governed agent plan is ready.");
   }
 
   return (
     <div className="app-shell">
       <aside className="sidebar" aria-label="Primary navigation">
         <div className="brand-lockup">
-          <div className="brand-mark" aria-hidden="true">
-            <Bot size={20} />
-          </div>
+          <div className="brand-mark" aria-hidden="true"><Bot size={20} /></div>
           <div>
             <p className="brand-name">SolePilot</p>
             <p className="brand-caption">Owner control plane</p>
@@ -237,26 +465,39 @@ export function MissionControl() {
           })}
         </nav>
 
+        <div className="runtime-identity">
+          <span className="status-dot" />
+          <div>
+            <p>{mission.planSource === "live-ai" ? "Live AI runtime" : "Replay runtime"}</p>
+            <span>{mission.plannerModel}</span>
+          </div>
+        </div>
         <div className="owner-card">
           <div className="owner-avatar" aria-hidden="true">MH</div>
           <div>
             <p className="owner-name">Mingfeng</p>
             <p className="owner-role">Owner online</p>
           </div>
-          <span className="status-dot" title="Connected" />
         </div>
       </aside>
 
       <main className="workspace">
         <header className="topbar">
           <div>
-            <p className="eyebrow">ONE-PERSON COMPANY / MISSION 001</p>
-            <h1>{view === "mission" ? demoMission.title : navItems.find((item) => item.id === view)?.label}</h1>
+            <p className="eyebrow">ONE-PERSON COMPANY / {mission.id.toUpperCase()}</p>
+            <h1>{view === "mission" ? mission.title : navItems.find((item) => item.id === view)?.label}</h1>
           </div>
           <div className="topbar-actions">
-            <button className="button secondary" onClick={resetDemo} type="button">
-              <RotateCcw aria-hidden="true" size={16} />
-              Reset
+            <span className="runtime-badge live" data-live={mission.planSource === "live-ai"}>
+              {mission.planSource === "live-ai" ? <Sparkles size={13} /> : <FileJson size={13} />}
+              {mission.planSource === "live-ai" ? "Live AI" : "Replay"}
+            </span>
+            <button className="button secondary icon-command" onClick={() => setComposerOpen(true)} title="New mission" type="button">
+              <Plus aria-hidden="true" size={17} />
+              <span>New mission</span>
+            </button>
+            <button className="button secondary icon-only" onClick={resetRuntime} title="Reset runtime" type="button">
+              <RotateCcw aria-hidden="true" size={17} />
             </button>
             {view === "mission" ? (
               <button
@@ -267,7 +508,13 @@ export function MissionControl() {
                 type="button"
               >
                 {isRunning ? <Clock3 aria-hidden="true" size={16} /> : <Play aria-hidden="true" size={16} />}
-                {isRunning ? "Agents working" : missionIsComplete ? "Mission complete" : "Run mission"}
+                {isRunning
+                  ? "Runtime active"
+                  : missionIsComplete
+                    ? "Mission complete"
+                    : completedCount > 0
+                      ? "Continue mission"
+                      : "Run mission"}
               </button>
             ) : null}
           </div>
@@ -275,12 +522,16 @@ export function MissionControl() {
 
         <p className="sr-only" aria-live="polite">{announcement}</p>
 
-        {view === "mission" ? (
+        {view === "mission" && selectedAction ? (
           <MissionView
+            artifacts={artifacts}
             completedCount={completedCount}
             evaluations={evaluations}
+            events={events}
+            mission={mission}
             onResolveReview={resolveOwnerReview}
             onSelect={setSelectedActionId}
+            policies={policies}
             selectedAction={selectedAction}
             statuses={statuses}
             waitingAction={waitingAction}
@@ -291,60 +542,86 @@ export function MissionControl() {
           <PoliciesView policies={policies} onToggle={togglePolicy} />
         ) : null}
 
-        {view === "receipts" ? <ReceiptsView receipts={receipts} /> : null}
+        {view === "receipts" ? (
+          <ReceiptsView
+            mission={mission}
+            onVerification={setVerification}
+            receipts={receipts}
+            verification={verification}
+          />
+        ) : null}
       </main>
+
+      {composerOpen ? (
+        <MissionComposer
+          initialDraft={{
+            objective: mission.objective || demoDraft.objective,
+            customer: mission.customer || demoDraft.customer,
+            source: mission.source || demoDraft.source,
+            deadline: mission.deadline || demoDraft.deadline,
+            budgetCapUsd: mission.budgetCapUsd || demoDraft.budgetCapUsd,
+          }}
+          initialMode={plannerMode}
+          onClose={() => setComposerOpen(false)}
+          onCreate={createMission}
+        />
+      ) : null}
     </div>
   );
 }
 
 function MissionView({
+  artifacts,
   completedCount,
   evaluations,
+  events,
+  mission,
   onResolveReview,
   onSelect,
+  policies,
   selectedAction,
   statuses,
   waitingAction,
 }: {
+  artifacts: ToolArtifact[];
   completedCount: number;
   evaluations: Record<string, ReturnType<typeof evaluateAction>>;
-  onResolveReview: (
-    actionId: string,
-    outcome: "approve" | "reject",
-  ) => void;
+  events: RuntimeEvent[];
+  mission: Mission;
+  onResolveReview: (actionId: string, outcome: "approve" | "reject") => void;
   onSelect: (actionId: string) => void;
+  policies: OwnerPolicy[];
   selectedAction: AgentAction;
   statuses: Record<string, RuntimeStatus>;
   waitingAction?: AgentAction;
 }) {
   const selectedEvaluation = evaluations[selectedAction.id];
+  const selectedArtifact = artifacts.find((artifact) => artifact.actionId === selectedAction.id);
+  const activePolicies = policies.filter((policy) => policy.enabled).length;
 
   return (
     <div className="mission-layout">
       <section className="mission-main" aria-label="Mission workflow">
         <div className="metric-band">
-          <Metric label="Customer" value={demoMission.customer} />
-          <Metric label="Budget cap" value={`$${demoMission.budgetCapUsd}`} />
-          <Metric label="Deadline" value="4 days" />
-          <Metric
-            label="Progress"
-            value={`${completedCount}/${demoMission.actions.length} outcomes`}
-          />
+          <Metric label="Stakeholder" value={mission.customer} />
+          <Metric label="Budget cap" value={`$${mission.budgetCapUsd}`} />
+          <Metric label="Planner" value={mission.planSource === "live-ai" ? "Puter AI" : "Reference"} />
+          <Metric label="Progress" value={`${completedCount}/${mission.actions.length} outcomes`} />
         </div>
 
         <div className="section-heading">
           <div>
             <h2>Agent execution plan</h2>
-            <p>Routine work runs. Consequential work stops at the owner boundary.</p>
+            <p>{mission.objective}</p>
           </div>
           <span className="policy-badge">
             <ShieldCheck aria-hidden="true" size={15} />
-            4 policies active
+            {activePolicies} policies active
           </span>
         </div>
 
         <div className="action-list">
-          {demoMission.actions.map((action, index) => (
+          {mission.actions.map((action, index) => (
             <ActionRow
               action={action}
               decision={evaluations[action.id].decision}
@@ -356,6 +633,8 @@ function MissionView({
             />
           ))}
         </div>
+
+        <RuntimeTrace events={events} />
       </section>
 
       <aside className="inspector" aria-label="Policy inspector">
@@ -368,24 +647,16 @@ function MissionView({
         </div>
 
         <div className="inspector-section">
-          <p className="field-label">Proposed action</p>
+          <p className="field-label">Proposed tool call</p>
           <h3>{selectedAction.title}</h3>
           <p>{selectedAction.description}</p>
         </div>
 
         <dl className="detail-list">
-          <div>
-            <dt>Authority</dt>
-            <dd>{decisionLabel(selectedEvaluation.decision)}</dd>
-          </div>
-          <div>
-            <dt>Destination</dt>
-            <dd>{selectedAction.destination ?? "Owner workspace"}</dd>
-          </div>
-          <div>
-            <dt>Spend</dt>
-            <dd>{selectedAction.amountUsd ? `$${selectedAction.amountUsd}` : "$0"}</dd>
-          </div>
+          <div><dt>Tool</dt><dd><code>{selectedAction.toolName}</code></dd></div>
+          <div><dt>Authority</dt><dd>{decisionLabel(selectedEvaluation.decision)}</dd></div>
+          <div><dt>Destination</dt><dd>{selectedAction.destination ?? "Owner workspace"}</dd></div>
+          <div><dt>Spend</dt><dd>{selectedAction.amountUsd ? `$${selectedAction.amountUsd}` : "$0"}</dd></div>
         </dl>
 
         <div className="rule-result" data-decision={selectedEvaluation.decision}>
@@ -396,25 +667,26 @@ function MissionView({
           </div>
         </div>
 
+        {selectedArtifact ? (
+          <div className="artifact-result">
+            <div className="artifact-heading">
+              <span><TerminalSquare size={14} /> Tool artifact</span>
+              <code>{selectedArtifact.provider}</code>
+            </div>
+            <p>{selectedArtifact.summary}</p>
+            <pre>{selectedArtifact.content}</pre>
+          </div>
+        ) : null}
+
         {waitingAction?.id === selectedAction.id ? (
           <div className="approval-actions">
-            <p>Only you can release this action.</p>
+            <p>{selectedAction.toolName} is paused at the owner boundary.</p>
             <div>
-              <button
-                className="button approve"
-                onClick={() => onResolveReview(selectedAction.id, "approve")}
-                type="button"
-              >
-                <Check aria-hidden="true" size={16} />
-                Approve
+              <button className="button approve" onClick={() => onResolveReview(selectedAction.id, "approve")} type="button">
+                <Check aria-hidden="true" size={16} />Approve
               </button>
-              <button
-                className="button reject"
-                onClick={() => onResolveReview(selectedAction.id, "reject")}
-                type="button"
-              >
-                <X aria-hidden="true" size={16} />
-                Reject
+              <button className="button reject" onClick={() => onResolveReview(selectedAction.id, "reject")} type="button">
+                <X aria-hidden="true" size={16} />Reject
               </button>
             </div>
           </div>
@@ -425,22 +697,10 @@ function MissionView({
 }
 
 function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="metric">
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </div>
-  );
+  return <div className="metric"><span>{label}</span><strong>{value}</strong></div>;
 }
 
-function ActionRow({
-  action,
-  decision,
-  index,
-  isSelected,
-  onSelect,
-  status,
-}: {
+function ActionRow({ action, decision, index, isSelected, onSelect, status }: {
   action: AgentAction;
   decision: Decision;
   index: number;
@@ -449,19 +709,13 @@ function ActionRow({
   status: RuntimeStatus;
 }) {
   const Icon = actionIcons[action.kind];
-
   return (
-    <button
-      className="action-row"
-      data-selected={isSelected}
-      onClick={() => onSelect(action.id)}
-      type="button"
-    >
+    <button className="action-row" data-selected={isSelected} onClick={() => onSelect(action.id)} type="button">
       <span className="step-index">{String(index + 1).padStart(2, "0")}</span>
       <span className="action-icon"><Icon aria-hidden="true" size={17} /></span>
       <span className="action-copy">
         <strong>{action.title}</strong>
-        <span>{action.agent} · {action.description}</span>
+        <span>{action.agent} · <code>{action.toolName}</code> · {action.description}</span>
       </span>
       <RuntimeBadge decision={decision} status={status} />
       <ChevronRight aria-hidden="true" className="row-chevron" size={17} />
@@ -469,13 +723,7 @@ function ActionRow({
   );
 }
 
-function RuntimeBadge({
-  decision,
-  status,
-}: {
-  decision: Decision;
-  status: RuntimeStatus;
-}) {
+function RuntimeBadge({ decision, status }: { decision: Decision; status: RuntimeStatus }) {
   if (status === "complete") return <span className="runtime-badge complete"><Check size={13} />Complete</span>;
   if (status === "blocked") return <span className="runtime-badge blocked"><X size={13} />Blocked</span>;
   if (status === "running") return <span className="runtime-badge running"><Clock3 size={13} />Running</span>;
@@ -487,28 +735,42 @@ function DecisionBadge({ decision }: { decision: Decision }) {
   return <span className="decision-badge" data-decision={decision}>{decisionLabel(decision)}</span>;
 }
 
-function PoliciesView({
-  policies,
-  onToggle,
-}: {
-  policies: OwnerPolicy[];
-  onToggle: (policyId: string) => void;
-}) {
+function RuntimeTrace({ events }: { events: RuntimeEvent[] }) {
+  const visible = events.slice(-5).reverse();
+  return (
+    <div className="runtime-trace">
+      <div className="trace-heading">
+        <span><Activity size={14} /> Runtime trace</span>
+        <code>{events.length} events</code>
+      </div>
+      {visible.length === 0 ? <p className="trace-empty">No runtime events.</p> : (
+        <div className="trace-list">
+          {visible.map((event) => (
+            <div className="trace-row" data-tone={event.tone} key={event.id}>
+              <span className="trace-dot" />
+              <strong>{event.label}</strong>
+              <p>{event.detail}</p>
+              <time>{new Date(event.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</time>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PoliciesView({ policies, onToggle }: { policies: OwnerPolicy[]; onToggle: (policyId: string) => void }) {
   return (
     <section className="content-view narrow-view">
       <div className="view-intro">
         <h2>Your authority, encoded</h2>
-        <p>Policies are evaluated before every action. Changes reset the demo so the next run is reproducible.</p>
+        <p>Every proposed tool call is evaluated against this policy set before execution.</p>
       </div>
       <div className="policy-list">
         {policies.map((policy) => (
           <div className="policy-row" key={policy.id}>
             <div className="policy-icon"><Settings2 aria-hidden="true" size={18} /></div>
-            <div>
-              <h3>{policy.name}</h3>
-              <p>{policy.description}</p>
-              <code>{policy.id}</code>
-            </div>
+            <div><h3>{policy.name}</h3><p>{policy.description}</p><code>{policy.id}</code></div>
             <button
               aria-checked={policy.enabled}
               aria-label={`${policy.enabled ? "Disable" : "Enable"} ${policy.name}`}
@@ -525,33 +787,167 @@ function PoliciesView({
   );
 }
 
-function ReceiptsView({ receipts }: { receipts: RuntimeReceipt[] }) {
+function ReceiptsView({ mission, onVerification, receipts, verification }: {
+  mission: Mission;
+  onVerification: (result: Verification) => void;
+  receipts: RuntimeReceipt[];
+  verification: Verification;
+}) {
+  async function verify() {
+    onVerification(await verifyReceiptChain(receipts));
+  }
+
+  function exportLedger() {
+    const payload = JSON.stringify({
+      schema: "solepilot.receipt-ledger.v1",
+      exportedAt: new Date().toISOString(),
+      mission: { id: mission.id, objective: mission.objective, planSource: mission.planSource },
+      receipts,
+    }, null, 2);
+    const url = URL.createObjectURL(new Blob([payload], { type: "application/json" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${mission.id}-receipt-ledger.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
   return (
-    <section className="content-view narrow-view">
-      <div className="view-intro">
-        <h2>Verifiable action history</h2>
-        <p>Every completed, approved, rejected, or blocked action produces a deterministic policy receipt.</p>
+    <section className="content-view narrow-view receipt-view">
+      <div className="view-intro ledger-intro">
+        <div>
+          <h2>Hash-linked action ledger</h2>
+          <p>Policy outcome, owner decision, artifact digest, and previous receipt are committed together.</p>
+        </div>
+        <div className="ledger-actions">
+          <button className="button secondary" disabled={receipts.length === 0} onClick={verify} type="button">
+            <ShieldCheck size={16} />Verify chain
+          </button>
+          <button className="button secondary icon-only" disabled={receipts.length === 0} onClick={exportLedger} title="Export JSON ledger" type="button">
+            <Download size={16} />
+          </button>
+        </div>
       </div>
+
+      {verification ? (
+        <div className="verification-result" data-valid={verification.valid}>
+          {verification.valid ? <CheckCircle2 size={17} /> : <AlertTriangle size={17} />}
+          <span>{verification.valid ? `${verification.checked} receipts verified. Chain intact.` : verification.error}</span>
+        </div>
+      ) : null}
+
       {receipts.length === 0 ? (
         <div className="empty-state">
           <ReceiptText aria-hidden="true" size={28} />
           <h3>No receipts yet</h3>
-          <p>Run the demo mission to generate the first policy outcome.</p>
+          <p>Run the mission to commit the first policy outcome.</p>
         </div>
       ) : (
         <div className="receipt-list">
           {receipts.map((receipt) => (
-            <article className="receipt-row" key={`${receipt.id}-${receipt.createdAt}`}>
-              <div className="receipt-status"><Check aria-hidden="true" size={16} /></div>
+            <article className="receipt-row" key={receipt.id}>
+              <div className="receipt-sequence">{String(receipt.sequence).padStart(2, "0")}</div>
               <div>
                 <p>{receipt.resultLabel}</p>
                 <code>{receipt.id}</code>
+                <span className="receipt-link">prev: {receipt.previousReceiptId ?? "GENESIS"}</span>
               </div>
-              <time dateTime={receipt.createdAt}>{new Date(receipt.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</time>
+              <div className="receipt-meta">
+                <span>{receipt.artifactDigest ? "ARTIFACT SEALED" : "NO TOOL OUTPUT"}</span>
+                <time dateTime={receipt.createdAt}>{new Date(receipt.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</time>
+              </div>
             </article>
           ))}
         </div>
       )}
     </section>
+  );
+}
+
+function MissionComposer({ initialDraft, initialMode, onClose, onCreate }: {
+  initialDraft: MissionDraft;
+  initialMode: PlannerMode;
+  onClose: () => void;
+  onCreate: (draft: MissionDraft, mode: PlannerMode) => Promise<void>;
+}) {
+  const [draft, setDraft] = useState(initialDraft);
+  const [mode, setMode] = useState(initialMode);
+  const [isPlanning, setIsPlanning] = useState(false);
+  const [error, setError] = useState("");
+
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+    setIsPlanning(true);
+    try {
+      await onCreate(draft, mode);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "The planner could not create this mission.");
+      setIsPlanning(false);
+    }
+  }
+
+  return (
+    <div className="modal-backdrop" role="presentation">
+      <section aria-labelledby="composer-title" aria-modal="true" className="mission-composer" role="dialog">
+        <header className="composer-header">
+          <div>
+            <p className="eyebrow">NEW GOVERNED RUNTIME</p>
+            <h2 id="composer-title">Create a mission</h2>
+          </div>
+          <button className="button secondary icon-only" onClick={onClose} title="Close" type="button"><X size={17} /></button>
+        </header>
+
+        <form onSubmit={submit}>
+          <label className="form-field objective-field">
+            <span>Objective</span>
+            <textarea
+              maxLength={500}
+              onChange={(event) => setDraft((current) => ({ ...current, objective: event.target.value }))}
+              required
+              value={draft.objective}
+            />
+          </label>
+          <div className="form-grid">
+            <label className="form-field">
+              <span>Stakeholder</span>
+              <input onChange={(event) => setDraft((current) => ({ ...current, customer: event.target.value }))} required value={draft.customer} />
+            </label>
+            <label className="form-field">
+              <span>Source</span>
+              <input onChange={(event) => setDraft((current) => ({ ...current, source: event.target.value }))} required value={draft.source} />
+            </label>
+            <label className="form-field">
+              <span>Deadline</span>
+              <input onChange={(event) => setDraft((current) => ({ ...current, deadline: event.target.value }))} required type="date" value={draft.deadline} />
+            </label>
+            <label className="form-field">
+              <span>Budget cap (USD)</span>
+              <input min="1" onChange={(event) => setDraft((current) => ({ ...current, budgetCapUsd: Number(event.target.value) }))} required type="number" value={draft.budgetCapUsd} />
+            </label>
+          </div>
+
+          <fieldset className="planner-choice">
+            <legend>Planner</legend>
+            <button data-active={mode === "replay"} onClick={() => setMode("replay")} type="button">
+              <FileJson size={17} /><span><strong>Replay</strong><small>Zero-config reference run</small></span>
+            </button>
+            <button data-active={mode === "live-ai"} onClick={() => setMode("live-ai")} type="button">
+              <BrainCircuit size={17} /><span><strong>Live AI</strong><small>Keyless Puter model session</small></span>
+            </button>
+          </fieldset>
+
+          {error ? <div className="composer-error"><AlertTriangle size={16} />{error}</div> : null}
+
+          <footer className="composer-footer">
+            <button className="button secondary" disabled={isPlanning} onClick={onClose} type="button">Cancel</button>
+            <button className="button primary create-plan" disabled={isPlanning} type="submit">
+              {isPlanning ? <Clock3 size={16} /> : mode === "live-ai" ? <Sparkles size={16} /> : <Play size={16} />}
+              {isPlanning ? "Planning" : "Create agent plan"}
+            </button>
+          </footer>
+        </form>
+      </section>
+    </div>
   );
 }
