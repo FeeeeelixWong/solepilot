@@ -2,7 +2,8 @@
 
 ## Product boundary
 
-SolePilot is the authority layer between an agent planner and business tools.
+SolePilot is the multi-mission authority layer between agent planners and
+business tools.
 It does not treat model output as authorization. Model-generated actions are
 untrusted proposals until they pass schema normalization and policy evaluation.
 
@@ -23,7 +24,8 @@ Devnet transaction.
    allow-listed tool.
 4. `evaluateAction` returns `allow`, `review`, or `block` with matched policy IDs.
 5. `executeGovernedAction` evaluates policy again at the tool boundary.
-6. Reviewed actions require the explicit `owner-approved` capability.
+6. Reviewed actions require a one-time capability bound to the mission, action
+   digest, policy result, nonce, and five-minute expiry.
 7. A successful adapter call returns a `ToolArtifact`. Online artifacts include
    provider request IDs, external references, and an HMAC attestation.
 8. The runtime commits the policy decision, final outcome, artifact digest, and
@@ -58,6 +60,7 @@ Each receipt canonicalizes and hashes:
 - mission ID, objective, budget cap, and planner source
 - full typed action
 - policy decision, reasons, and matched policy IDs
+- approval capability ID for owner-released actions
 - terminal outcome: delegated, approved, rejected, or blocked
 - digest of the tool artifact, when a tool ran
 - receipt sequence and previous receipt ID
@@ -66,12 +69,26 @@ Each receipt canonicalizes and hashes:
 the same governed input to produce the same receipt ID. The previous receipt ID
 turns individual receipts into an ordered tamper-evident chain.
 
-## Persistence
+## Workspace persistence
 
-The current runtime saves its mission, policies, statuses, artifacts, trace, and
-ledger in versioned browser local storage. Online tool execution happens on the
-server, but the workspace remains local-first and resumable. Receipt verification
-must still be used before trusting restored data.
+The control plane saves multiple independent runtimes in a versioned browser
+workspace. Each runtime contains its mission, policies, statuses, artifacts,
+trace, and ledger. The migration layer upgrades the previous single-runtime
+schema and the original Solana-specific payment shape. Online tool execution
+happens on the server, but the workspace remains local-first and resumable.
+Receipt verification must still be used before trusting restored data.
+
+Approval capabilities are deliberately not persisted. A refreshed or resumed
+review must receive a fresh owner decision.
+
+## Approval capability boundary
+
+Owner approval does not pass a reusable boolean or role string to a connector.
+SolePilot creates a short-lived capability whose digest commits to the full
+action, mission constraints, and current policy evaluation. The governed tool
+adapter verifies and consumes that capability before invoking the external
+provider. Reuse, expiry, action changes, mission changes, and policy-result
+changes all fail closed.
 
 ## Online connector boundary
 
@@ -96,18 +113,20 @@ provider timestamp before it is attested and sealed into the receipt chain.
 ## Solana payment boundary
 
 A payment mission starts with owner-entered structured fields rather than a
-free-form model prompt: payee name, recipient address, SOL amount, maximum SOL
-cap, purpose, deadline, requirements, and the fixed `solana-devnet` network.
+free-form model prompt: scheme, network, asset, payee, recipient, amount,
+maximum amount, optional resource, purpose, deadline, and requirements.
 The server validates the address and numeric bounds before returning a plan.
 
-The planner copies the recipient, amount, asset, network, purpose, and requirements into
-the typed `wallet.transfer` action. `policy-payment-intent` compares that action
+The planner copies the scheme, recipient, amount, asset, network, resource,
+purpose, and requirements into the typed `wallet.transfer` action.
+`policy-payment-intent` compares that action
 with the sealed mission intent and fails closed if any protected field changes
 or the payment deadline has expired.
 `policy-budget-cap` rejects amounts above the owner cap, and
 `policy-owner-approval` pauses every valid payment before invocation.
 
-After approval, the browser dynamically loads the Solana adapter, connects to
+After capability approval, the payment registry resolves the matching adapter.
+The current browser adapter connects to
 OKX Wallet or a compatible Phantom-style provider, builds a System Program SOL
 transfer, and requests the wallet signature. SolePilot never handles the seed
 phrase or private key. The adapter waits for Devnet confirmation and records
@@ -121,11 +140,11 @@ replace adapters without changing policy semantics:
 
 | Reference component | Production replacement |
 | --- | --- |
-| Browser local storage | Encrypted workspace database with tenant isolation |
+| Browser multi-mission workspace | Encrypted workspace database with tenant isolation |
 | Reliable server planner | Organization-managed model gateway with schema-constrained output |
 | Fixed Telegram outbox | Email/CRM connectors with per-tenant scoped OAuth |
 | Solana Devnet wallet adapter | Production network adapter with transaction simulation, allow-listed assets, and per-transaction authorization |
-| Browser owner approval | Passkey-signed approval capability |
+| Browser-issued action capability | Passkey-signed approval capability |
 | SHA-256 receipt chain | Signed append-only log with external timestamp anchor |
 
 Production connectors must receive only the normalized action and a short-lived
@@ -135,11 +154,12 @@ general-purpose credential from the model context.
 ## Known limitations
 
 - Persistence is device-local rather than synchronized across owner devices.
-- Receipts are hash-linked and online results are server-attested, but owner
-  approvals are not yet passkey-signed.
+- Receipts are hash-linked and online results are server-attested. Approval
+  capabilities are action-bound and single-use, but are not yet passkey-signed.
 - Telegram is a fixed-destination proof connector, not a multi-tenant outbox.
-- Payment execution is deliberately limited to Solana Devnet; it moves only
-  test SOL after a wallet prompt and is not a mainnet payment product.
+- The payment schema and registry are chain-neutral, but the only executable
+  adapter is currently Solana Devnet. It moves only test SOL after a wallet
+  prompt and is not a mainnet payment product.
 - The default planner and evidence-backed draft are deterministic; model-driven
   synthesis is an optional production adapter rather than a demo dependency.
 

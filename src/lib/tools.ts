@@ -1,9 +1,12 @@
 import { canonicalize, sha256 } from "./receipt";
+import { consumeApprovalCapability } from "./capability";
+import { executePayment } from "./payment-adapters";
 import type { ChatCompletion } from "./planner";
 import { evaluateAction } from "./policy";
 import { runOnlineResearch, sendTelegramDelivery } from "./online";
 import type {
   AgentAction,
+  ApprovalCapability,
   Mission,
   OwnerPolicy,
   PlannerMode,
@@ -45,14 +48,16 @@ function deterministicContent(
       if (mission.payment) {
         return {
           provider: "deterministic",
-          summary: `Prepared a payment authorization for ${mission.payment.amountSol} SOL to ${mission.payment.payeeName}.`,
+          summary: `Prepared a payment authorization for ${mission.payment.amount} ${mission.payment.asset} to ${mission.payment.payeeName}.`,
           content: [
             "PAYMENT AUTHORIZATION",
             `Payee: ${mission.payment.payeeName}`,
-            `Recipient: ${mission.payment.recipientAddress}`,
-            `Network: Solana Devnet`,
-            `Amount: ${mission.payment.amountSol} SOL`,
-            `Owner cap: ${mission.payment.maxAmountSol} SOL`,
+            `Scheme: ${mission.payment.scheme}`,
+            `Recipient: ${mission.payment.payTo}`,
+            `Network: ${mission.payment.network}`,
+            `Amount: ${mission.payment.amount} ${mission.payment.asset}`,
+            `Owner cap: ${mission.payment.maxAmount} ${mission.payment.asset}`,
+            ...(mission.payment.resource ? [`Resource: ${mission.payment.resource}`] : []),
             `Purpose: ${mission.payment.purpose}`,
             `Requirements: ${mission.payment.requirements}`,
             "Status: prepared; wallet signature still required.",
@@ -181,12 +186,11 @@ async function executeTool(
     );
   }
   if (mission.executionMode === "online" && action.toolName === "wallet.transfer") {
-    const { executeSolanaTransfer } = await import("./solana");
-    const transfer = await executeSolanaTransfer(action, mission);
+    const transfer = await executePayment(action, mission);
     const fingerprint = await sha256(canonicalize({
       actionId: action.id,
       missionId: mission.id,
-      signature: transfer.signature,
+      transactionId: transfer.transactionId,
       toolName: action.toolName,
     }));
     return {
@@ -194,18 +198,19 @@ async function executeTool(
       missionId: mission.id,
       actionId: action.id,
       toolName: action.toolName,
-      provider: "solana-devnet",
+      provider: transfer.provider,
       title: action.title,
-      summary: `Confirmed ${transfer.amountSol} SOL to ${transfer.recipient} on Solana Devnet.`,
+      summary: `Confirmed ${transfer.amount} ${transfer.asset} to ${transfer.recipient} on ${action.network}.`,
       content: [
-        "SOLANA DEVNET PAYMENT RECEIPT",
+        "GOVERNED PAYMENT RECEIPT",
+        `Adapter: ${transfer.provider}`,
         `Sender: ${transfer.sender}`,
         `Recipient: ${transfer.recipient}`,
-        `Amount: ${transfer.amountSol} SOL`,
-        `Signature: ${transfer.signature}`,
+        `Amount: ${transfer.amount} ${transfer.asset}`,
+        `Transaction: ${transfer.transactionId}`,
         "Status: confirmed",
       ].join("\n"),
-      requestId: transfer.signature,
+      requestId: transfer.transactionId,
       externalReference: transfer.explorerUrl,
       createdAt: new Date().toISOString(),
     };
@@ -252,7 +257,7 @@ export async function executeGovernedAction({
   mode,
   policies,
   previousArtifacts,
-  authorization = "delegated",
+  approvalCapability,
   ownerCode = "",
   complete,
 }: {
@@ -261,7 +266,7 @@ export async function executeGovernedAction({
   mode: PlannerMode;
   policies: OwnerPolicy[];
   previousArtifacts: ToolArtifact[];
-  authorization?: "delegated" | "owner-approved";
+  approvalCapability?: ApprovalCapability;
   ownerCode?: string;
   complete?: ChatCompletion;
 }): Promise<{ artifact: ToolArtifact; evaluation: PolicyEvaluation }> {
@@ -274,11 +279,22 @@ export async function executeGovernedAction({
     );
   }
 
-  if (evaluation.decision === "review" && authorization !== "owner-approved") {
-    throw new GovernanceError(
-      `Owner approval is required before invoking ${action.toolName}.`,
-      evaluation,
-    );
+  if (evaluation.decision === "review") {
+    try {
+      await consumeApprovalCapability(
+        approvalCapability,
+        action,
+        mission,
+        evaluation,
+      );
+    } catch (error) {
+      throw new GovernanceError(
+        error instanceof Error
+          ? error.message
+          : `Owner approval is required before invoking ${action.toolName}.`,
+        evaluation,
+      );
+    }
   }
 
   const artifact = await executeTool(

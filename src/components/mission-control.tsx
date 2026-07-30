@@ -17,6 +17,7 @@ import {
   FileJson,
   LockKeyhole,
   KeyRound,
+  LayoutDashboard,
   Play,
   Plus,
   ReceiptText,
@@ -37,12 +38,14 @@ import { demoDraft, demoMission } from "@/lib/demo";
 import { planMission } from "@/lib/planner";
 import { evaluateAction, ownerPolicies } from "@/lib/policy";
 import { createReceipt, verifyReceiptChain } from "@/lib/receipt";
-import { loadRuntime, saveRuntime } from "@/lib/storage";
+import { loadWorkspace, saveWorkspace } from "@/lib/storage";
+import { issueApprovalCapability } from "@/lib/capability";
 import { executeGovernedAction } from "@/lib/tools";
 import { getRuntimeHealth, type RuntimeHealth } from "@/lib/online";
 import type {
   ActionOutcome,
   AgentAction,
+  ApprovalCapability,
   Decision,
   Mission,
   MissionDraft,
@@ -53,9 +56,10 @@ import type {
   RuntimeStatus,
   ToolArtifact,
   PaymentIntent,
+  PersistedRuntime,
 } from "@/lib/types";
 
-type View = "mission" | "policies" | "receipts";
+type View = "missions" | "mission" | "policies" | "receipts";
 type Verification = { valid: boolean; checked: number; error?: string } | null;
 
 const actionIcons: Record<AgentAction["kind"], typeof Search> = {
@@ -68,6 +72,7 @@ const actionIcons: Record<AgentAction["kind"], typeof Search> = {
 };
 
 const navItems: Array<{ id: View; label: string; icon: typeof Activity }> = [
+  { id: "missions", label: "Missions", icon: LayoutDashboard },
   { id: "mission", label: "Mission", icon: Activity },
   { id: "policies", label: "Policies", icon: ShieldCheck },
   { id: "receipts", label: "Ledger", icon: ReceiptText },
@@ -78,12 +83,14 @@ const delay = (duration: number) =>
 
 const defaultPaymentIntent: PaymentIntent = {
   payeeName: "",
-  recipientAddress: "",
-  amountSol: 0.01,
-  maxAmountSol: 0.05,
+  scheme: "native-transfer",
+  network: "solana-devnet",
+  asset: "SOL",
+  amount: 0.01,
+  maxAmount: 0.05,
+  payTo: "",
   purpose: "Pay an approved vendor invoice",
   requirements: "Recipient and amount must match this instruction; owner wallet signature required.",
-  network: "solana-devnet",
 };
 
 function statusesFor(mission: Mission): Record<string, RuntimeStatus> {
@@ -140,26 +147,39 @@ export function MissionControl() {
   const [announcement, setAnnouncement] = useState("Mission ready.");
   const [runtimeHealth, setRuntimeHealth] = useState<RuntimeHealth | null>(null);
   const [ownerCode, setOwnerCode] = useState("");
+  const [missionRuntimes, setMissionRuntimes] = useState<PersistedRuntime[]>([]);
   const receiptRef = useRef<RuntimeReceipt[]>([]);
   const artifactRef = useRef<ToolArtifact[]>([]);
 
+  function restoreRuntime(runtime: PersistedRuntime) {
+    const savedPolicies = new Map(
+      runtime.policies.map((policy) => [policy.id, policy]),
+    );
+    setMission(runtime.mission);
+    setStatuses(runtime.statuses);
+    setPolicies(ownerPolicies.map((policy) => ({
+      ...policy,
+      enabled: savedPolicies.get(policy.id)?.enabled ?? policy.enabled,
+    })));
+    setReceipts(runtime.receipts);
+    setArtifacts(runtime.artifacts);
+    setEvents(runtime.events);
+    setPlannerMode(runtime.plannerMode);
+    setSelectedActionId(runtime.mission.actions[0]?.id ?? "");
+    setVerification(null);
+    setOwnerCode("");
+    receiptRef.current = runtime.receipts;
+    artifactRef.current = runtime.artifacts;
+  }
+
   useEffect(() => {
-    const saved = loadRuntime();
-    if (saved) {
-      setMission(saved.mission);
-      setStatuses(saved.statuses);
-      const savedPolicies = new Map(saved.policies.map((policy) => [policy.id, policy]));
-      setPolicies(ownerPolicies.map((policy) => ({
-        ...policy,
-        enabled: savedPolicies.get(policy.id)?.enabled ?? policy.enabled,
-      })));
-      setReceipts(saved.receipts);
-      setArtifacts(saved.artifacts);
-      setEvents(saved.events);
-      setPlannerMode(saved.plannerMode);
-      setSelectedActionId(saved.mission.actions[0]?.id ?? "");
-      receiptRef.current = saved.receipts;
-      artifactRef.current = saved.artifacts;
+    const workspace = loadWorkspace();
+    if (workspace) {
+      const active = workspace.runtimes.find(
+        (runtime) => runtime.mission.id === workspace.activeMissionId,
+      ) ?? workspace.runtimes[0];
+      setMissionRuntimes(workspace.runtimes);
+      restoreRuntime(active);
       setAnnouncement("Restored the last governed runtime from this browser.");
     } else {
       const event = newEvent(
@@ -168,6 +188,16 @@ export function MissionControl() {
         "success",
       );
       setEvents([event]);
+      setMissionRuntimes([{
+        version: 4,
+        mission: demoMission,
+        statuses: statusesFor(demoMission),
+        policies: ownerPolicies,
+        receipts: [],
+        artifacts: [],
+        events: [event],
+        plannerMode: "replay",
+      }]);
     }
     setHydrated(true);
   }, []);
@@ -188,8 +218,8 @@ export function MissionControl() {
 
   useEffect(() => {
     if (!hydrated) return;
-    saveRuntime({
-      version: 3,
+    const activeRuntime: PersistedRuntime = {
+      version: 4,
       mission,
       statuses,
       policies,
@@ -197,6 +227,21 @@ export function MissionControl() {
       artifacts,
       events,
       plannerMode,
+    };
+    setMissionRuntimes((current) => {
+      const index = current.findIndex(
+        (runtime) => runtime.mission.id === mission.id,
+      );
+      const next = index >= 0
+        ? current.map((runtime, runtimeIndex) =>
+            runtimeIndex === index ? activeRuntime : runtime)
+        : [activeRuntime, ...current];
+      saveWorkspace({
+        version: 1,
+        activeMissionId: mission.id,
+        runtimes: next,
+      });
+      return next;
     });
   }, [artifacts, events, hydrated, mission, plannerMode, policies, receipts, statuses]);
 
@@ -236,6 +281,7 @@ export function MissionControl() {
     action: AgentAction,
     outcome: ActionOutcome,
     artifact?: ToolArtifact,
+    capability?: ApprovalCapability,
   ) {
     const evaluation = evaluateAction(action, mission, policies);
     const previous = receiptRef.current.at(-1)?.id ?? null;
@@ -246,6 +292,7 @@ export function MissionControl() {
       previous,
       receiptRef.current.length + 1,
       artifact,
+      capability,
     );
     const runtimeReceipt = { ...receipt, resultLabel: outcomeLabel(outcome) };
     const next = [...receiptRef.current, runtimeReceipt];
@@ -424,13 +471,27 @@ export function MissionControl() {
       ),
     );
     try {
+      const evaluation = evaluateAction(action, mission, policies);
+      const approvalCapability = await issueApprovalCapability(
+        action,
+        mission,
+        evaluation,
+      );
+      appendEvent(
+        newEvent(
+          "CAPABILITY ISSUED",
+          `${approvalCapability.id} is bound to this action and expires in five minutes.`,
+          "success",
+          action.id,
+        ),
+      );
       const { artifact } = await executeGovernedAction({
         action,
         mission,
         mode: mission.planSource,
         policies,
         previousArtifacts: artifactRef.current,
-        authorization: "owner-approved",
+        approvalCapability,
         ownerCode,
       });
       commitArtifact(artifact);
@@ -439,7 +500,7 @@ export function MissionControl() {
         [actionId]: "complete",
       };
       setStatuses(nextStatuses);
-      await issueReceipt(action, "approved", artifact);
+      await issueReceipt(action, "approved", artifact, approvalCapability);
       setAnnouncement(`${action.title} was approved and executed. Continuing automatically.`);
       await delay(180);
       await runMission(nextStatuses, true);
@@ -477,6 +538,20 @@ export function MissionControl() {
       ),
     );
     resetRuntime();
+  }
+
+  function openMission(missionId: string) {
+    if (isRunning || missionId === mission.id) {
+      setView("mission");
+      return;
+    }
+    const runtime = missionRuntimes.find(
+      (candidate) => candidate.mission.id === missionId,
+    );
+    if (!runtime) return;
+    restoreRuntime(runtime);
+    setView("mission");
+    setAnnouncement(`Opened ${runtime.mission.title}.`);
   }
 
   async function createMission(
@@ -534,6 +609,8 @@ export function MissionControl() {
                 <span>{item.label}</span>
                 {item.id === "receipts" && receipts.length > 0 ? (
                   <span className="nav-count">{receipts.length}</span>
+                ) : item.id === "missions" && missionRuntimes.length > 0 ? (
+                  <span className="nav-count">{missionRuntimes.length}</span>
                 ) : null}
               </button>
             );
@@ -559,8 +636,16 @@ export function MissionControl() {
       <main className="workspace">
         <header className="topbar">
           <div>
-            <p className="eyebrow">ONE-PERSON COMPANY / {mission.id.toUpperCase()}</p>
-            <h1>{view === "mission" ? mission.title : navItems.find((item) => item.id === view)?.label}</h1>
+            <p className="eyebrow">
+              {view === "missions"
+                ? "ONE-PERSON COMPANY / CONTROL PLANE"
+                : `ONE-PERSON COMPANY / ${mission.id.toUpperCase()}`}
+            </p>
+            <h1>{view === "mission"
+              ? mission.title
+              : view === "missions"
+                ? "Mission control"
+                : navItems.find((item) => item.id === view)?.label}</h1>
           </div>
           <div className="topbar-actions">
             <span className="runtime-badge live" data-live={mission.executionMode === "online"}>
@@ -573,9 +658,11 @@ export function MissionControl() {
               <Plus aria-hidden="true" size={17} />
               <span>New mission</span>
             </button>
-            <button className="button secondary icon-only" onClick={resetRuntime} title="Reset runtime" type="button">
-              <RotateCcw aria-hidden="true" size={17} />
-            </button>
+            {view !== "missions" ? (
+              <button className="button secondary icon-only" onClick={resetRuntime} title="Reset runtime" type="button">
+                <RotateCcw aria-hidden="true" size={17} />
+              </button>
+            ) : null}
             {view === "mission" ? (
               <button
                 aria-busy={isRunning}
@@ -598,6 +685,15 @@ export function MissionControl() {
         </header>
 
         <p className="sr-only" aria-live="polite">{announcement}</p>
+
+        {view === "missions" ? (
+          <MissionsView
+            activeMissionId={mission.id}
+            onCreate={() => setComposerOpen(true)}
+            onOpen={openMission}
+            runtimes={missionRuntimes}
+          />
+        ) : null}
 
         {view === "mission" && selectedAction ? (
           <MissionView
@@ -652,6 +748,103 @@ export function MissionControl() {
   );
 }
 
+function MissionsView({
+  activeMissionId,
+  onCreate,
+  onOpen,
+  runtimes,
+}: {
+  activeMissionId: string;
+  onCreate: () => void;
+  onOpen: (missionId: string) => void;
+  runtimes: PersistedRuntime[];
+}) {
+  const totals = runtimes.reduce(
+    (current, runtime) => {
+      const values = Object.values(runtime.statuses);
+      current.actions += runtime.mission.actions.length;
+      current.completed += values.filter(
+        (status) => status === "complete" || status === "blocked",
+      ).length;
+      current.reviews += values.filter(
+        (status) => status === "awaiting-owner",
+      ).length;
+      current.receipts += runtime.receipts.length;
+      return current;
+    },
+    { actions: 0, completed: 0, reviews: 0, receipts: 0 },
+  );
+
+  return (
+    <section className="control-plane-view">
+      <div className="control-metrics">
+        <Metric label="Active missions" value={String(runtimes.length)} />
+        <Metric label="Governed outcomes" value={`${totals.completed}/${totals.actions}`} />
+        <Metric label="Waiting approvals" value={String(totals.reviews)} />
+        <Metric label="Receipt proofs" value={String(totals.receipts)} />
+      </div>
+
+      <div className="mission-index-heading">
+        <div>
+          <h2>Company missions</h2>
+          <p>Switch between governed runtimes without losing plans, approvals, artifacts, or receipts.</p>
+        </div>
+        <button className="button primary" onClick={onCreate} type="button">
+          <Plus size={16} />Create mission
+        </button>
+      </div>
+
+      <div className="mission-index">
+        {runtimes.map((runtime) => {
+          const values = Object.values(runtime.statuses);
+          const completed = values.filter(
+            (status) => status === "complete" || status === "blocked",
+          ).length;
+          const waiting = values.some(
+            (status) => status === "awaiting-owner",
+          );
+          const complete =
+            runtime.mission.actions.length > 0 &&
+            completed === runtime.mission.actions.length;
+          return (
+            <button
+              className="mission-card"
+              data-active={runtime.mission.id === activeMissionId}
+              key={runtime.mission.id}
+              onClick={() => onOpen(runtime.mission.id)}
+              type="button"
+            >
+              <span className="mission-card-icon">
+                {runtime.mission.missionType === "payment"
+                  ? <WalletCards size={18} />
+                  : <FileCheck2 size={18} />}
+              </span>
+              <span className="mission-card-copy">
+                <span className="mission-card-meta">
+                  <code>{runtime.mission.id}</code>
+                  <span data-state={waiting ? "review" : complete ? "complete" : "ready"}>
+                    {waiting ? "Approval needed" : complete ? "Complete" : "Ready"}
+                  </span>
+                </span>
+                <strong>{runtime.mission.title}</strong>
+                <span>{runtime.mission.objective}</span>
+                <small>
+                  {completed}/{runtime.mission.actions.length} outcomes
+                  <b>·</b>
+                  {runtime.receipts.length} receipts
+                  <b>·</b>
+                  {runtime.mission.executionMode === "online" ? "Online" : "Replay"}
+                </small>
+              </span>
+              <ChevronRight size={18} />
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 function MissionView({
   artifacts,
   completedCount,
@@ -695,7 +888,7 @@ function MissionView({
           <Metric
             label="Budget cap"
             value={mission.payment
-              ? `${mission.payment.maxAmountSol} SOL`
+              ? `${mission.payment.maxAmount} ${mission.payment.asset}`
               : `$${mission.budgetCapUsd}`}
           />
           <Metric label="Runtime" value={mission.executionMode === "online" ? "Online agent" : "Safe replay"} />
@@ -747,6 +940,7 @@ function MissionView({
 
         <dl className="detail-list">
           <div><dt>Tool</dt><dd><code>{selectedAction.toolName}</code></dd></div>
+          {selectedAction.scheme ? <div><dt>Scheme</dt><dd>{selectedAction.scheme}</dd></div> : null}
           <div><dt>Authority</dt><dd>{decisionLabel(selectedEvaluation.decision)}</dd></div>
           <div><dt>Destination</dt><dd>{selectedAction.destination ?? "Owner workspace"}</dd></div>
           <div>
@@ -756,6 +950,7 @@ function MissionView({
               : selectedAction.amountUsd ? `$${selectedAction.amountUsd}` : "$0"}</dd>
           </div>
           {selectedAction.network ? <div><dt>Network</dt><dd>{selectedAction.network}</dd></div> : null}
+          {selectedAction.resource ? <div><dt>Resource</dt><dd>{selectedAction.resource}</dd></div> : null}
           {selectedAction.requirements ? <div><dt>Requirements</dt><dd>{selectedAction.requirements}</dd></div> : null}
         </dl>
 
@@ -806,6 +1001,10 @@ function MissionView({
         {waitingAction?.id === selectedAction.id ? (
           <div className="approval-actions">
             <p>{selectedAction.toolName} is paused at the owner boundary.</p>
+            <div className="capability-note">
+              <KeyRound size={14} />
+              Approval issues a one-time capability bound to this mission, action, policy result, and a five-minute expiry.
+            </div>
             {mission.executionMode === "online" && selectedAction.toolName === "outbox.send" ? (
               <label className="owner-code-field">
                 <span><KeyRound size={13} /> Owner connector code</span>
@@ -943,7 +1142,7 @@ function ReceiptsView({ mission, onVerification, receipts, verification }: {
 
   function exportLedger() {
     const payload = JSON.stringify({
-      schema: "solepilot.receipt-ledger.v1",
+      schema: "solepilot.receipt-ledger.v2",
       exportedAt: new Date().toISOString(),
       mission: { id: mission.id, objective: mission.objective, planSource: mission.planSource },
       receipts,
@@ -998,6 +1197,9 @@ function ReceiptsView({ mission, onVerification, receipts, verification }: {
               </div>
               <div className="receipt-meta">
                 <span>{receipt.artifactDigest ? "ARTIFACT SEALED" : "NO TOOL OUTPUT"}</span>
+                {receipt.approvalCapabilityId ? (
+                  <code>{receipt.approvalCapabilityId}</code>
+                ) : null}
                 <time dateTime={receipt.createdAt}>{new Date(receipt.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</time>
               </div>
             </article>
@@ -1048,8 +1250,8 @@ function MissionComposer({ initialDraft, initialMode, onClose, onCreate }: {
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
-    if (draft.missionType === "payment" && payment.amountSol > payment.maxAmountSol) {
-      setError("Payment amount cannot exceed the maximum authorized SOL.");
+    if (draft.missionType === "payment" && payment.amount > payment.maxAmount) {
+      setError("Payment amount cannot exceed the maximum authorized amount.");
       return;
     }
     setIsPlanning(true);
@@ -1080,7 +1282,7 @@ function MissionComposer({ initialDraft, initialMode, onClose, onCreate }: {
               <FileCheck2 size={17} /><span><strong>Work delivery</strong><small>Research, draft, and governed delivery</small></span>
             </button>
             <button data-active={draft.missionType === "payment"} onClick={() => selectMissionType("payment")} type="button">
-              <WalletCards size={17} /><span><strong>Solana payment</strong><small>Owner-defined Devnet transfer</small></span>
+              <WalletCards size={17} /><span><strong>Governed payment</strong><small>Adapter-routed owner authorization</small></span>
             </button>
           </fieldset>
 
@@ -1088,7 +1290,7 @@ function MissionComposer({ initialDraft, initialMode, onClose, onCreate }: {
             <>
               <div className="payment-notice">
                 <ShieldCheck size={17} />
-                <div><strong>Solana Devnet only</strong><span>The owner wallet signs the exact transfer. SolePilot never receives a private key.</span></div>
+                <div><strong>Solana Devnet adapter active</strong><span>The intent uses a chain-neutral schema. The owner wallet signs the exact transfer; SolePilot never receives a private key.</span></div>
               </div>
               <div className="form-grid payment-grid">
                 <label className="form-field">
@@ -1096,20 +1298,20 @@ function MissionComposer({ initialDraft, initialMode, onClose, onCreate }: {
                   <input onChange={(event) => updatePayment({ payeeName: event.target.value })} placeholder="Acme API Services" required value={payment.payeeName} />
                 </label>
                 <label className="form-field">
-                  <span>Network</span>
-                  <input readOnly value="Solana Devnet" />
+                  <span>Payment route</span>
+                  <input readOnly value={`${payment.scheme} · ${payment.network}`} />
                 </label>
                 <label className="form-field payment-address-field">
                   <span>Recipient address</span>
-                  <input autoCapitalize="off" autoCorrect="off" onChange={(event) => updatePayment({ recipientAddress: event.target.value.trim() })} placeholder="Solana recipient address" required spellCheck={false} value={payment.recipientAddress} />
+                  <input autoCapitalize="off" autoCorrect="off" onChange={(event) => updatePayment({ payTo: event.target.value.trim() })} placeholder="Solana recipient address" required spellCheck={false} value={payment.payTo} />
                 </label>
                 <label className="form-field">
-                  <span>Amount (SOL)</span>
-                  <input max={payment.maxAmountSol} min="0.000001" onChange={(event) => updatePayment({ amountSol: Number(event.target.value) })} required step="0.000001" type="number" value={payment.amountSol} />
+                  <span>Amount ({payment.asset})</span>
+                  <input max={payment.maxAmount} min="0.000001" onChange={(event) => updatePayment({ amount: Number(event.target.value) })} required step="0.000001" type="number" value={payment.amount} />
                 </label>
                 <label className="form-field">
-                  <span>Maximum authorized (SOL)</span>
-                  <input min="0.000001" onChange={(event) => updatePayment({ maxAmountSol: Number(event.target.value) })} required step="0.000001" type="number" value={payment.maxAmountSol} />
+                  <span>Maximum authorized ({payment.asset})</span>
+                  <input min="0.000001" onChange={(event) => updatePayment({ maxAmount: Number(event.target.value) })} required step="0.000001" type="number" value={payment.maxAmount} />
                 </label>
                 <label className="form-field">
                   <span>Payment deadline</span>

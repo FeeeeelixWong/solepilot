@@ -10,7 +10,8 @@ import {
 import type { AgentAction, Mission } from "./types";
 
 export interface SolanaTransferResult {
-  amountSol: number;
+  amount: number;
+  asset: "SOL";
   recipient: string;
   sender: string;
   signature: string;
@@ -36,18 +37,23 @@ export async function executeSolanaTransfer(
   if (
     !payment ||
     action.toolName !== "wallet.transfer" ||
+    action.scheme !== "native-transfer" ||
+    payment.scheme !== "native-transfer" ||
     action.network !== "solana-devnet" ||
+    payment.network !== "solana-devnet" ||
     action.asset !== "SOL" ||
-    action.recipient !== payment.recipientAddress ||
-    action.amount !== payment.amountSol ||
+    payment.asset !== "SOL" ||
+    action.recipient !== payment.payTo ||
+    action.amount !== payment.amount ||
+    action.resource !== payment.resource ||
     action.description !== payment.purpose ||
     action.requirements !== payment.requirements
   ) {
     throw new Error("The transfer payload does not match the sealed payment intent.");
   }
 
-  const recipient = new PublicKey(payment.recipientAddress);
-  const lamports = payment.amountSol * LAMPORTS_PER_SOL;
+  const recipient = new PublicKey(payment.payTo);
+  const lamports = payment.amount * LAMPORTS_PER_SOL;
   if (!Number.isSafeInteger(lamports) || lamports <= 0) {
     throw new Error("The SOL amount is invalid.");
   }
@@ -85,7 +91,8 @@ export async function executeSolanaTransfer(
   }
 
   return {
-    amountSol: payment.amountSol,
+    amount: payment.amount,
+    asset: "SOL",
     recipient: recipient.toBase58(),
     sender: sender.toBase58(),
     signature,

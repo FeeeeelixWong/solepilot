@@ -1,6 +1,7 @@
 import type {
   ActionOutcome,
   ActionReceipt,
+  ApprovalCapability,
   Mission,
   PolicyEvaluation,
   ToolArtifact,
@@ -65,6 +66,7 @@ export async function createReceipt(
   previousReceiptId: string | null = null,
   sequence = 1,
   artifact?: ToolArtifact,
+  capability?: ApprovalCapability,
 ): Promise<ActionReceipt> {
   const action = mission.actions.find(
     (candidate) => candidate.id === evaluation.actionId,
@@ -77,6 +79,7 @@ export async function createReceipt(
   const artifactDigest = await digestArtifact(artifact);
   const canonicalPayload = canonicalize({
     action,
+    approvalCapabilityId: capability?.id ?? null,
     artifactDigest,
     outcome,
     policy: {
@@ -106,6 +109,7 @@ export async function createReceipt(
     actionId: action.id,
     policyDecision: evaluation.decision,
     outcome,
+    approvalCapabilityId: capability?.id ?? null,
     artifactDigest,
     canonicalPayload,
     createdAt: new Date().toISOString(),

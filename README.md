@@ -1,8 +1,9 @@
 # SolePilot
 
-SolePilot is a governed agent runtime for one-person companies. A reliable
-server planner turns an owner objective into tool calls; a deterministic policy engine then
-allows, pauses, or blocks every call before it reaches an execution adapter.
+SolePilot is a multi-mission agent control plane for one-person companies. A
+reliable server planner turns owner objectives into typed tool calls; a
+deterministic policy engine then allows, pauses, or blocks every call before it
+reaches an execution or payment adapter.
 
 **Online product:** https://solepilot.vercel.app
 
@@ -20,7 +21,7 @@ SolePilot separates planning from authority:
 1. A planner proposes a typed execution plan.
 2. The policy engine evaluates each proposed tool call.
 3. Routine internal work runs inside delegated authority.
-4. External sends, commitments, and spending pause for the owner.
+4. External sends, commitments, and spending pause for an action-bound owner capability.
 5. Policy violations fail closed before tool invocation.
 6. Each terminal outcome is committed to a hash-linked receipt ledger.
 
@@ -43,6 +44,10 @@ The public demo offers two runtime modes:
   transfer. A confirmed transaction produces a signature and Solana Explorer
   link in the artifact and receipt ledger.
 
+The **Missions** workspace keeps multiple independent runtimes in one control
+plane. Each mission preserves its own plan, statuses, policy state, artifacts,
+and receipt ledger while the owner switches between operations.
+
 For the shortest complete run:
 
 1. Select **Run mission** for the zero-configuration policy walkthrough.
@@ -56,7 +61,10 @@ For the shortest complete run:
 9. At the delivery boundary, enter the owner connector code and approve.
 10. Inspect the Telegram message ID, provider reference, and sealed receipt.
 
-For a real payment run, select **New mission**, choose **Solana payment**, enter
+Open **Missions** at any time to create another runtime or resume a different
+mission without discarding the current execution history.
+
+For a real payment run, select **New mission**, choose **Governed payment**, enter
 the vendor and payment instruction, and create the payment mission. Run the
 authorization step, inspect the exact recipient and amount in Policy Inspector,
 then select **Approve & pay**. The wallet extension remains the final signing
@@ -73,23 +81,24 @@ sign only after policy evaluation and explicit approval.
 
 ```mermaid
 flowchart LR
-  O[Owner objective] --> P[Replay or server planner]
+  O[Mission portfolio] --> P[Replay or server planner]
   P --> V[Schema normalization]
   V --> G[Deterministic policy gate]
   G -->|ALLOW| T[Governed tool adapter]
   G -->|REVIEW| A[Owner approval]
-  A -->|approve| T
+  A -->|one-time capability| T
   A -->|reject| R[Rejected receipt]
   G -->|BLOCK| B[Blocked receipt]
-  T --> F[Online provider or local artifact]
+  T --> X[Tool or payment adapter]
+  X --> F[Online provider or local artifact]
   F --> H[Hash-linked receipt]
   R --> H
   B --> H
 ```
 
 The tool adapter independently re-evaluates policy. Calling it outside the UI
-does not bypass governance: reviewed calls require explicit owner
-authorization, and blocked calls always throw before execution.
+does not bypass governance: reviewed calls require a matching, unexpired,
+single-use owner capability, and blocked calls always throw before execution.
 
 See [ARCHITECTURE.md](./ARCHITECTURE.md) for trust boundaries, receipt details,
 and the production replacement plan.
@@ -97,13 +106,17 @@ and the production replacement plan.
 ## What is implemented
 
 - Custom mission composition with configurable stakeholder, deadline, and cap
+- Multi-mission control plane with independent resumable runtimes
+- Versioned workspace persistence with migration from the original single-runtime schema
 - No-login same-origin server planner with a deterministic local fallback
 - Server-side online research using Wikipedia and Hacker News
 - Real owner-approved Telegram delivery through a fixed-destination connector
-- Structured Solana Devnet payment intents with exact recipient, amount, cap,
-  purpose, deadline, and requirement enforcement
+- Chain-neutral payment intents covering scheme, network, asset, amount, cap,
+  recipient, resource, purpose, deadline, and execution requirements
+- Payment adapter registry with Solana Devnet as the first executable adapter
 - Non-custodial OKX Wallet and Phantom signing with confirmed transaction and
   Explorer evidence
+- Five-minute, action-bound approval capabilities consumed before external invocation
 - Provider request IDs, evidence URLs, message IDs, and HMAC attestations
 - Deterministic Replay planner for reliable evaluation
 - Typed tools for workspace search, document composition, outbox delivery,
@@ -138,6 +151,7 @@ The test suite covers:
 - evidence-backed drafting without an external model session
 - direct tool-adapter bypass attempts
 - payment-intent tampering, over-cap payment, and unsigned transfer attempts
+- approval-capability replay and changed-action attempts
 - approved sandbox execution
 - receipt-chain tamper detection
 

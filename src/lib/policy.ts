@@ -64,10 +64,12 @@ export function evaluateAction(
     const payment = mission.payment;
     const matchesIntent = Boolean(
       payment &&
-      action.recipient === payment.recipientAddress &&
-      action.amount === payment.amountSol &&
-      action.asset === "SOL" &&
+      action.scheme === payment.scheme &&
+      action.recipient === payment.payTo &&
+      action.amount === payment.amount &&
+      action.asset === payment.asset &&
       action.network === payment.network &&
+      action.resource === payment.resource &&
       action.description === payment.purpose &&
       action.requirements === payment.requirements,
     );
@@ -94,13 +96,13 @@ export function evaluateAction(
     if (
       enabled.has("policy-budget-cap") &&
       payment &&
-      (action.amount ?? 0) > payment.maxAmountSol
+      (action.amount ?? 0) > payment.maxAmount
     ) {
       return {
         actionId: action.id,
         decision: "block",
         reasons: [
-          `The requested ${action.amount?.toFixed(4)} SOL exceeds the ${payment.maxAmountSol.toFixed(4)} SOL mission cap.`,
+          `The requested ${action.amount?.toFixed(6)} ${payment.asset} exceeds the ${payment.maxAmount.toFixed(6)} ${payment.asset} mission cap.`,
         ],
         matchedPolicyIds: ["policy-budget-cap"],
       };

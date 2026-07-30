@@ -17,14 +17,19 @@ export type ToolName =
 
 export type MissionType = "work" | "payment";
 
+export type PaymentScheme = "native-transfer" | "x402";
+
 export interface PaymentIntent {
   payeeName: string;
-  recipientAddress: string;
-  amountSol: number;
-  maxAmountSol: number;
+  scheme: PaymentScheme;
+  network: string;
+  asset: string;
+  amount: number;
+  maxAmount: number;
+  payTo: string;
+  resource?: string;
   purpose: string;
   requirements: string;
-  network: "solana-devnet";
 }
 
 export type Decision = "allow" | "review" | "block";
@@ -49,9 +54,11 @@ export interface AgentAction {
   destination?: string;
   amountUsd?: number;
   amount?: number;
-  asset?: "SOL";
-  network?: PaymentIntent["network"];
+  scheme?: PaymentScheme;
+  asset?: string;
+  network?: string;
   recipient?: string;
+  resource?: string;
   requirements?: string;
   containsSensitiveData?: boolean;
 }
@@ -102,13 +109,7 @@ export interface ToolArtifact {
   missionId: string;
   actionId: string;
   toolName: ToolName;
-  provider:
-    | "deterministic"
-    | "puter-ai"
-    | "sandbox"
-    | "online-research"
-    | "telegram"
-    | "solana-devnet";
+  provider: string;
   title: string;
   summary: string;
   content: string;
@@ -131,6 +132,7 @@ export interface ActionReceipt {
   actionId: string;
   policyDecision: Decision;
   outcome: ActionOutcome;
+  approvalCapabilityId: string | null;
   artifactDigest: string | null;
   canonicalPayload: string;
   createdAt: string;
@@ -150,7 +152,7 @@ export interface RuntimeEvent {
 }
 
 export interface PersistedRuntime {
-  version: 3;
+  version: 4;
   mission: Mission;
   statuses: Record<string, RuntimeStatus>;
   policies: OwnerPolicy[];
@@ -158,6 +160,23 @@ export interface PersistedRuntime {
   artifacts: ToolArtifact[];
   events: RuntimeEvent[];
   plannerMode: PlannerMode;
+}
+
+export interface PersistedWorkspace {
+  version: 1;
+  activeMissionId: string;
+  runtimes: PersistedRuntime[];
+}
+
+export interface ApprovalCapability {
+  id: string;
+  missionId: string;
+  actionId: string;
+  actionDigest: string;
+  policyDigest: string;
+  issuedAt: string;
+  expiresAt: string;
+  nonce: string;
 }
 
 export interface OnlineToolResult {

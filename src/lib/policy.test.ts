@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { demoMission } from "./demo";
+import { issueApprovalCapability } from "./capability";
+import { adapterForPayment } from "./payment-adapters";
 import { evaluateAction } from "./policy";
 import { createOnlinePlan, planMission } from "./planner";
 import { canonicalize, createReceipt, verifyReceiptChain } from "./receipt";
@@ -59,6 +61,25 @@ test("the same evaluated action produces the same receipt id", async () => {
 
   assert.equal(first.id, second.id);
   assert.equal(first.canonicalPayload, second.canonicalPayload);
+});
+
+test("an owner-released receipt commits its approval capability", async () => {
+  const action = demoMission.actions.find((candidate) => candidate.id === "action-send");
+  assert.ok(action);
+  const evaluation = evaluateAction(action, demoMission);
+  const capability = await issueApprovalCapability(action, demoMission, evaluation);
+  const receipt = await createReceipt(
+    demoMission,
+    evaluation,
+    "approved",
+    null,
+    1,
+    undefined,
+    capability,
+  );
+
+  assert.equal(receipt.approvalCapabilityId, capability.id);
+  assert.match(receipt.canonicalPayload, new RegExp(capability.id));
 });
 
 test("live planner normalizes model JSON into governed tool calls", async () => {
@@ -126,9 +147,11 @@ test("server planner adds only an in-cap spend when the objective requests payme
 test("payment planner preserves the owner-entered transfer payload", () => {
   const payment = {
     payeeName: "Devnet Vendor",
-    recipientAddress: "11111111111111111111111111111111",
-    amountSol: 0.01,
-    maxAmountSol: 0.05,
+    scheme: "native-transfer" as const,
+    payTo: "11111111111111111111111111111111",
+    amount: 0.01,
+    maxAmount: 0.05,
+    asset: "SOL",
     purpose: "Pay the approved test invoice",
     requirements: "Use Solana Devnet and require an owner wallet signature.",
     network: "solana-devnet" as const,
@@ -138,7 +161,7 @@ test("payment planner preserves the owner-entered transfer payload", () => {
     customer: payment.payeeName,
     source: "Owner-entered payment instruction",
     deadline: "2026-08-01",
-    budgetCapUsd: payment.maxAmountSol,
+    budgetCapUsd: payment.maxAmount,
     missionType: "payment",
     payment,
   });
@@ -146,18 +169,21 @@ test("payment planner preserves the owner-entered transfer payload", () => {
 
   assert.ok(transfer);
   assert.equal(transfer.toolName, "wallet.transfer");
-  assert.equal(transfer.recipient, payment.recipientAddress);
-  assert.equal(transfer.amount, payment.amountSol);
+  assert.equal(transfer.recipient, payment.payTo);
+  assert.equal(transfer.amount, payment.amount);
   assert.equal(transfer.requirements, payment.requirements);
   assert.equal(evaluateAction(transfer, mission).decision, "review");
+  assert.equal(adapterForPayment(payment)?.id, "solana-native-devnet");
 });
 
 test("payment policy blocks a transfer changed after owner entry", () => {
   const payment = {
     payeeName: "Devnet Vendor",
-    recipientAddress: "11111111111111111111111111111111",
-    amountSol: 0.01,
-    maxAmountSol: 0.05,
+    scheme: "native-transfer" as const,
+    payTo: "11111111111111111111111111111111",
+    amount: 0.01,
+    maxAmount: 0.05,
+    asset: "SOL",
     purpose: "Pay the approved test invoice",
     requirements: "Require an owner wallet signature.",
     network: "solana-devnet" as const,
@@ -167,7 +193,7 @@ test("payment policy blocks a transfer changed after owner entry", () => {
     customer: payment.payeeName,
     source: "Owner-entered payment instruction",
     deadline: "2026-08-01",
-    budgetCapUsd: payment.maxAmountSol,
+    budgetCapUsd: payment.maxAmount,
     missionType: "payment",
     payment,
   });
@@ -182,9 +208,11 @@ test("payment policy blocks a transfer changed after owner entry", () => {
 test("payment policy blocks changed execution requirements", () => {
   const payment = {
     payeeName: "Devnet Vendor",
-    recipientAddress: "11111111111111111111111111111111",
-    amountSol: 0.01,
-    maxAmountSol: 0.05,
+    scheme: "native-transfer" as const,
+    payTo: "11111111111111111111111111111111",
+    amount: 0.01,
+    maxAmount: 0.05,
+    asset: "SOL",
     purpose: "Pay the approved test invoice",
     requirements: "Require an owner wallet signature and a confirmed transaction.",
     network: "solana-devnet" as const,
@@ -194,7 +222,7 @@ test("payment policy blocks changed execution requirements", () => {
     customer: payment.payeeName,
     source: "Owner-entered payment instruction",
     deadline: "2026-08-01",
-    budgetCapUsd: payment.maxAmountSol,
+    budgetCapUsd: payment.maxAmount,
     missionType: "payment",
     payment,
   });
@@ -209,9 +237,11 @@ test("payment policy blocks changed execution requirements", () => {
 test("payment policy blocks an expired payment intent", () => {
   const payment = {
     payeeName: "Devnet Vendor",
-    recipientAddress: "11111111111111111111111111111111",
-    amountSol: 0.01,
-    maxAmountSol: 0.05,
+    scheme: "native-transfer" as const,
+    payTo: "11111111111111111111111111111111",
+    amount: 0.01,
+    maxAmount: 0.05,
+    asset: "SOL",
     purpose: "Pay the approved test invoice",
     requirements: "Require an owner wallet signature.",
     network: "solana-devnet" as const,
@@ -221,7 +251,7 @@ test("payment policy blocks an expired payment intent", () => {
     customer: payment.payeeName,
     source: "Owner-entered payment instruction",
     deadline: "2000-01-01",
-    budgetCapUsd: payment.maxAmountSol,
+    budgetCapUsd: payment.maxAmount,
     missionType: "payment",
     payment,
   });
@@ -236,9 +266,11 @@ test("payment policy blocks an expired payment intent", () => {
 test("payment policy blocks an owner-entered amount above its cap", () => {
   const payment = {
     payeeName: "Devnet Vendor",
-    recipientAddress: "11111111111111111111111111111111",
-    amountSol: 0.06,
-    maxAmountSol: 0.05,
+    scheme: "native-transfer" as const,
+    payTo: "11111111111111111111111111111111",
+    amount: 0.06,
+    maxAmount: 0.05,
+    asset: "SOL",
     purpose: "Pay the approved test invoice",
     requirements: "Require an owner wallet signature.",
     network: "solana-devnet" as const,
@@ -248,7 +280,7 @@ test("payment policy blocks an owner-entered amount above its cap", () => {
     customer: payment.payeeName,
     source: "Owner-entered payment instruction",
     deadline: "2026-08-01",
-    budgetCapUsd: payment.maxAmountSol,
+    budgetCapUsd: payment.maxAmount,
     missionType: "payment",
     payment,
   });
@@ -263,9 +295,11 @@ test("payment policy blocks an owner-entered amount above its cap", () => {
 test("tool adapter refuses a payment without owner authorization", async () => {
   const payment = {
     payeeName: "Devnet Vendor",
-    recipientAddress: "11111111111111111111111111111111",
-    amountSol: 0.01,
-    maxAmountSol: 0.05,
+    scheme: "native-transfer" as const,
+    payTo: "11111111111111111111111111111111",
+    amount: 0.01,
+    maxAmount: 0.05,
+    asset: "SOL",
     purpose: "Pay the approved test invoice",
     requirements: "Require an owner wallet signature.",
     network: "solana-devnet" as const,
@@ -275,7 +309,7 @@ test("tool adapter refuses a payment without owner authorization", async () => {
     customer: payment.payeeName,
     source: "Owner-entered payment instruction",
     deadline: "2026-08-01",
-    budgetCapUsd: payment.maxAmountSol,
+    budgetCapUsd: payment.maxAmount,
     missionType: "payment",
     payment,
   });
@@ -299,7 +333,7 @@ test("tool adapter refuses a payment without owner authorization", async () => {
 test("planner surfaces invalid payment input instead of using a fallback plan", async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () => new Response(
-    JSON.stringify({ error: "Payment amount cannot exceed the maximum authorized SOL." }),
+    JSON.stringify({ error: "Payment amount cannot exceed the maximum authorized amount." }),
     { status: 400, headers: { "Content-Type": "application/json" } },
   );
 
@@ -314,15 +348,17 @@ test("planner surfaces invalid payment input instead of using a fallback plan", 
         missionType: "payment",
         payment: {
           payeeName: "Devnet Vendor",
-          recipientAddress: "11111111111111111111111111111111",
-          amountSol: 0.06,
-          maxAmountSol: 0.05,
+          scheme: "native-transfer",
+          payTo: "11111111111111111111111111111111",
+          amount: 0.06,
+          maxAmount: 0.05,
+          asset: "SOL",
           purpose: "Pay the approved invoice",
           requirements: "Require owner signature.",
           network: "solana-devnet",
         },
       }, "live-ai"),
-      /cannot exceed the maximum authorized SOL/,
+      /cannot exceed the maximum authorized amount/,
     );
   } finally {
     globalThis.fetch = originalFetch;
@@ -396,28 +432,94 @@ test("tool adapter fails closed on an over-cap spend", async () => {
         { id: "policy-budget-cap", name: "Budget", description: "", enabled: true },
       ],
       previousArtifacts: [],
-      authorization: "owner-approved",
     }),
     (error: unknown) => error instanceof GovernanceError && /Policy blocked/.test(error.message),
   );
 });
 
-test("owner authorization releases a reviewed sandbox tool", async () => {
+test("an action-bound approval capability releases a reviewed sandbox tool", async () => {
   const action = demoMission.actions.find((candidate) => candidate.id === "action-send");
   assert.ok(action);
+  const policies = [
+    { id: "policy-owner-approval", name: "Owner approval", description: "", enabled: true },
+  ];
+  const approvalCapability = await issueApprovalCapability(
+    action,
+    demoMission,
+    evaluateAction(action, demoMission, policies),
+  );
   const { artifact } = await executeGovernedAction({
     action,
     mission: demoMission,
     mode: "replay",
-    policies: [
-      { id: "policy-owner-approval", name: "Owner approval", description: "", enabled: true },
-    ],
+    policies,
     previousArtifacts: [],
-    authorization: "owner-approved",
+    approvalCapability,
   });
 
   assert.equal(artifact.provider, "sandbox");
   assert.match(artifact.content, /No live message was sent/);
+});
+
+test("an approval capability cannot be replayed", async () => {
+  const action = demoMission.actions.find((candidate) => candidate.id === "action-send");
+  assert.ok(action);
+  const policies = [
+    { id: "policy-owner-approval", name: "Owner approval", description: "", enabled: true },
+  ];
+  const approvalCapability = await issueApprovalCapability(
+    action,
+    demoMission,
+    evaluateAction(action, demoMission, policies),
+  );
+
+  await executeGovernedAction({
+    action,
+    mission: demoMission,
+    mode: "replay",
+    policies,
+    previousArtifacts: [],
+    approvalCapability,
+  });
+
+  await assert.rejects(
+    executeGovernedAction({
+      action,
+      mission: demoMission,
+      mode: "replay",
+      policies,
+      previousArtifacts: [],
+      approvalCapability,
+    }),
+    (error: unknown) =>
+      error instanceof GovernanceError && /already been consumed/.test(error.message),
+  );
+});
+
+test("an approval capability cannot authorize a changed action", async () => {
+  const action = demoMission.actions.find((candidate) => candidate.id === "action-send");
+  assert.ok(action);
+  const policies = [
+    { id: "policy-owner-approval", name: "Owner approval", description: "", enabled: true },
+  ];
+  const approvalCapability = await issueApprovalCapability(
+    action,
+    demoMission,
+    evaluateAction(action, demoMission, policies),
+  );
+
+  await assert.rejects(
+    executeGovernedAction({
+      action: { ...action, destination: "changed@example.com" },
+      mission: demoMission,
+      mode: "replay",
+      policies,
+      previousArtifacts: [],
+      approvalCapability,
+    }),
+    (error: unknown) =>
+      error instanceof GovernanceError && /does not match/.test(error.message),
+  );
 });
 
 test("online research seals provider evidence into the artifact", async () => {
