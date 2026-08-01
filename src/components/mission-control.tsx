@@ -3,7 +3,6 @@
 import {
   Activity,
   AlertTriangle,
-  Bot,
   BrainCircuit,
   Check,
   CheckCircle2,
@@ -34,6 +33,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { ProofView } from "@/components/proof-view";
 import { demoDraft, demoMission } from "@/lib/demo";
 import { planMission } from "@/lib/planner";
 import { evaluateAction, ownerPolicies } from "@/lib/policy";
@@ -59,7 +59,7 @@ import type {
   PersistedRuntime,
 } from "@/lib/types";
 
-type View = "missions" | "mission" | "policies" | "receipts";
+type View = "missions" | "mission" | "policies" | "receipts" | "proof";
 type Verification = { valid: boolean; checked: number; error?: string } | null;
 
 const actionIcons: Record<AgentAction["kind"], typeof Search> = {
@@ -76,6 +76,7 @@ const navItems: Array<{ id: View; label: string; icon: typeof Activity }> = [
   { id: "mission", label: "Mission", icon: Activity },
   { id: "policies", label: "Policies", icon: ShieldCheck },
   { id: "receipts", label: "Ledger", icon: ReceiptText },
+  { id: "proof", label: "Proof", icon: FileCheck2 },
 ];
 
 const delay = (duration: number) =>
@@ -531,6 +532,29 @@ export function MissionControl() {
     setView("mission");
   }
 
+  function loadJudgeDemo() {
+    const event = newEvent(
+      "PROOF READY",
+      "Zero-configuration policy walkthrough loaded for evaluation.",
+      "success",
+    );
+    const nextStatuses = statusesFor(demoMission);
+    setMission(demoMission);
+    setStatuses(nextStatuses);
+    setPolicies(ownerPolicies);
+    setReceipts([]);
+    setArtifacts([]);
+    setEvents([event]);
+    setPlannerMode("replay");
+    setSelectedActionId(demoMission.actions[0].id);
+    setVerification(null);
+    setOwnerCode("");
+    receiptRef.current = [];
+    artifactRef.current = [];
+    setAnnouncement("The 90-second governed execution proof is ready.");
+    setView("mission");
+  }
+
   function togglePolicy(policyId: string) {
     setPolicies((current) =>
       current.map((policy) =>
@@ -587,7 +611,9 @@ export function MissionControl() {
     <div className="app-shell">
       <aside className="sidebar" aria-label="Primary navigation">
         <div className="brand-lockup">
-          <div className="brand-mark" aria-hidden="true"><Bot size={20} /></div>
+          <div className="brand-mark" aria-hidden="true">
+            <img alt="" height="24" src="/solepilot-mark.svg" width="24" />
+          </div>
           <div>
             <p className="brand-name">SolePilot</p>
             <p className="brand-caption">Owner control plane</p>
@@ -639,12 +665,16 @@ export function MissionControl() {
             <p className="eyebrow">
               {view === "missions"
                 ? "ONE-PERSON COMPANY / CONTROL PLANE"
-                : `ONE-PERSON COMPANY / ${mission.id.toUpperCase()}`}
+                : view === "proof"
+                  ? "ONE-PERSON COMPANY / SYSTEM PROOF"
+                  : `ONE-PERSON COMPANY / ${mission.id.toUpperCase()}`}
             </p>
             <h1>{view === "mission"
               ? mission.title
               : view === "missions"
                 ? "Mission control"
+                : view === "proof"
+                  ? "Authority you can inspect"
                 : navItems.find((item) => item.id === view)?.label}</h1>
           </div>
           <div className="topbar-actions">
@@ -658,7 +688,7 @@ export function MissionControl() {
               <Plus aria-hidden="true" size={17} />
               <span>New mission</span>
             </button>
-            {view !== "missions" ? (
+            {view !== "missions" && view !== "proof" ? (
               <button className="button secondary icon-only" onClick={resetRuntime} title="Reset runtime" type="button">
                 <RotateCcw aria-hidden="true" size={17} />
               </button>
@@ -710,6 +740,7 @@ export function MissionControl() {
             statuses={statuses}
             ownerCode={ownerCode}
             runtimeHealth={runtimeHealth}
+            receipts={receipts}
             waitingAction={waitingAction}
           />
         ) : null}
@@ -724,6 +755,14 @@ export function MissionControl() {
             onVerification={setVerification}
             receipts={receipts}
             verification={verification}
+          />
+        ) : null}
+
+        {view === "proof" ? (
+          <ProofView
+            onStartDemo={loadJudgeDemo}
+            receiptCount={receipts.length}
+            runtimeHealth={runtimeHealth}
           />
         ) : null}
       </main>
@@ -858,6 +897,7 @@ function MissionView({
   selectedAction,
   statuses,
   ownerCode,
+  receipts,
   runtimeHealth,
   waitingAction,
 }: {
@@ -873,6 +913,7 @@ function MissionView({
   selectedAction: AgentAction;
   statuses: Record<string, RuntimeStatus>;
   ownerCode: string;
+  receipts: RuntimeReceipt[];
   runtimeHealth: RuntimeHealth | null;
   waitingAction?: AgentAction;
 }) {
@@ -883,6 +924,12 @@ function MissionView({
   return (
     <div className="mission-layout">
       <section className="mission-main" aria-label="Mission workflow">
+        <DemoRunway
+          artifacts={artifacts}
+          receipts={receipts}
+          statuses={statuses}
+          waitingAction={waitingAction}
+        />
         <div className="metric-band">
           <Metric label="Stakeholder" value={mission.customer} />
           <Metric
@@ -1039,6 +1086,53 @@ function MissionView({
   );
 }
 
+function DemoRunway({
+  artifacts,
+  receipts,
+  statuses,
+  waitingAction,
+}: {
+  artifacts: ToolArtifact[];
+  receipts: RuntimeReceipt[];
+  statuses: Record<string, RuntimeStatus>;
+  waitingAction?: AgentAction;
+}) {
+  const hasStarted = Object.values(statuses).some((status) => status !== "pending");
+  const hasOwnerDecision = receipts.some(
+    (receipt) => receipt.outcome === "approved" || receipt.outcome === "rejected",
+  );
+  const hasBlocked = receipts.some((receipt) => receipt.outcome === "blocked");
+  const steps = [
+    { label: "Policy gate", detail: "pre-tool", complete: hasStarted },
+    { label: "Owner boundary", detail: "capability", complete: hasOwnerDecision, active: Boolean(waitingAction) },
+    { label: "Tool evidence", detail: "artifact", complete: artifacts.length > 0 },
+    { label: "Fail closed", detail: "blocked", complete: hasBlocked },
+    { label: "Receipt chain", detail: "verifiable", complete: receipts.length > 0 },
+  ];
+
+  return (
+    <div className="demo-runway">
+      <div className="demo-runway-title">
+        <span><Play aria-hidden="true" size={13} /> 90-second proof</span>
+        <code>RUN → REVIEW → BLOCK → VERIFY</code>
+      </div>
+      <div className="demo-runway-steps">
+        {steps.map((step, index) => (
+          <div
+            className="demo-runway-step"
+            data-active={step.active === true}
+            data-complete={step.complete}
+            key={step.label}
+          >
+            <span>{step.complete ? <Check size={12} /> : String(index + 1).padStart(2, "0")}</span>
+            <div><strong>{step.label}</strong><small>{step.detail}</small></div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function Metric({ label, value }: { label: string; value: string }) {
   return <div className="metric"><span>{label}</span><strong>{value}</strong></div>;
 }
@@ -1136,8 +1230,16 @@ function ReceiptsView({ mission, onVerification, receipts, verification }: {
   receipts: RuntimeReceipt[];
   verification: Verification;
 }) {
+  const [copiedReceiptId, setCopiedReceiptId] = useState("");
+
   async function verify() {
     onVerification(await verifyReceiptChain(receipts));
+  }
+
+  async function copyReceipt(receipt: RuntimeReceipt) {
+    await navigator.clipboard.writeText(JSON.stringify(receipt, null, 2));
+    setCopiedReceiptId(receipt.id);
+    window.setTimeout(() => setCopiedReceiptId(""), 1600);
   }
 
   function exportLedger() {
@@ -1188,21 +1290,48 @@ function ReceiptsView({ mission, onVerification, receipts, verification }: {
       ) : (
         <div className="receipt-list">
           {receipts.map((receipt) => (
-            <article className="receipt-row" key={receipt.id}>
-              <div className="receipt-sequence">{String(receipt.sequence).padStart(2, "0")}</div>
-              <div>
-                <p>{receipt.resultLabel}</p>
-                <code>{receipt.id}</code>
-                <span className="receipt-link">prev: {receipt.previousReceiptId ?? "GENESIS"}</span>
+            <details className="receipt-proof" key={receipt.id}>
+              <summary className="receipt-row">
+                <div className="receipt-sequence">{String(receipt.sequence).padStart(2, "0")}</div>
+                <div>
+                  <p>{receipt.resultLabel}</p>
+                  <code>{receipt.id}</code>
+                  <span className="receipt-link">prev: {receipt.previousReceiptId ?? "GENESIS"}</span>
+                </div>
+                <div className="receipt-meta">
+                  <span>{receipt.artifactDigest ? "ARTIFACT SEALED" : "NO TOOL OUTPUT"}</span>
+                  {receipt.approvalCapabilityId ? (
+                    <code>{receipt.approvalCapabilityId}</code>
+                  ) : null}
+                  <time dateTime={receipt.createdAt}>{new Date(receipt.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</time>
+                </div>
+                <ChevronRight aria-hidden="true" className="receipt-chevron" size={17} />
+              </summary>
+              <div className="receipt-proof-body">
+                <dl className="receipt-proof-grid">
+                  <div><dt>Action</dt><dd><code>{receipt.actionId}</code></dd></div>
+                  <div><dt>Policy decision</dt><dd>{receipt.policyDecision.toUpperCase()}</dd></div>
+                  <div><dt>Outcome</dt><dd>{receipt.outcome.toUpperCase()}</dd></div>
+                  <div><dt>Capability</dt><dd><code>{receipt.approvalCapabilityId ?? "NOT REQUIRED"}</code></dd></div>
+                  <div><dt>Artifact digest</dt><dd><code>{receipt.artifactDigest ?? "NO TOOL OUTPUT"}</code></dd></div>
+                  <div><dt>Previous receipt</dt><dd><code>{receipt.previousReceiptId ?? "GENESIS"}</code></dd></div>
+                </dl>
+                <div className="canonical-proof">
+                  <div>
+                    <span>Canonical payload committed by SHA-256</span>
+                    <button
+                      className="copy-proof"
+                      onClick={() => copyReceipt(receipt)}
+                      type="button"
+                    >
+                      {copiedReceiptId === receipt.id ? <Check size={13} /> : <FileJson size={13} />}
+                      {copiedReceiptId === receipt.id ? "Copied" : "Copy receipt JSON"}
+                    </button>
+                  </div>
+                  <pre>{receipt.canonicalPayload}</pre>
+                </div>
               </div>
-              <div className="receipt-meta">
-                <span>{receipt.artifactDigest ? "ARTIFACT SEALED" : "NO TOOL OUTPUT"}</span>
-                {receipt.approvalCapabilityId ? (
-                  <code>{receipt.approvalCapabilityId}</code>
-                ) : null}
-                <time dateTime={receipt.createdAt}>{new Date(receipt.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</time>
-              </div>
-            </article>
+            </details>
           ))}
         </div>
       )}

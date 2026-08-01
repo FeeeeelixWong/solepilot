@@ -2,12 +2,16 @@
   "name": "solepilot",
   "version": "0.3.0",
   "private": true,
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
     "test": "node --import tsx --test src/lib/*.test.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "smoke:live": "node --use-env-proxy scripts/live-smoke.mjs"
   },
   "dependencies": {
     "@solana/web3.js": "^1.98.4",

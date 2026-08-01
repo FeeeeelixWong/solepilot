@@ -13,9 +13,34 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://solepilot.vercel.app"),
   title: "SolePilot | Governed autonomy for one-person companies",
   description:
     "An autonomous operating system that lets solo founders delegate work without surrendering control.",
+  keywords: [
+    "AI agents",
+    "agent governance",
+    "one-person company",
+    "Solana",
+    "verifiable receipts",
+  ],
+  icons: {
+    icon: "/icon.svg",
+  },
+  openGraph: {
+    title: "SolePilot | Governed autonomy for one-person companies",
+    description:
+      "Let agents operate without letting them grant themselves authority.",
+    type: "website",
+    url: "/",
+    siteName: "SolePilot",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "SolePilot | Governed autonomy for one-person companies",
+    description:
+      "Let agents operate without letting them grant themselves authority.",
+  },
 };
 
 export default function RootLayout({

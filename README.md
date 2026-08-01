@@ -1,134 +1,148 @@
-# SolePilot
+<p align="center">
+  <img src="./public/solepilot-mark.svg" width="72" alt="SolePilot mark" />
+</p>
 
-SolePilot is a multi-mission agent control plane for one-person companies. A
-reliable server planner turns owner objectives into typed tool calls; a
-deterministic policy engine then allows, pauses, or blocks every call before it
-reaches an execution or payment adapter.
+<h1 align="center">SolePilot</h1>
 
-**Online product:** https://solepilot.vercel.app
+<p align="center"><strong>Let agents operate. Never let them grant themselves authority.</strong></p>
 
-**Replay mirror:** https://feeeeelixwong.github.io/solepilot/
+<p align="center">
+  A governed mission control plane for one-person companies. Agent workflows
+  execute delegated work, pause at owner boundaries, fail closed on policy
+  violations, and commit every outcome to a verifiable receipt chain.
+</p>
+
+<p align="center">
+  <a href="https://solepilot.vercel.app"><strong>Live product</strong></a> ·
+  <a href="./EVIDENCE.md">Evidence map</a> ·
+  <a href="./ARCHITECTURE.md">Architecture</a> ·
+  <a href="./SECURITY.md">Security review</a> ·
+  <a href="https://openarena.to/en/projects/cmrsq528y000004juvcenfwl5">OpenArena submission</a>
+</p>
+
+<p align="center">
+  <a href="https://openarena.to/en/projects/cmrsq528y000004juvcenfwl5"><img src="https://openarena.to/api/badge/cmrsq528y000004juvcenfwl5" alt="OpenArena score" /></a>
+</p>
+
+![SolePilot governed mission control](./docs/solepilot-control-plane.png)
 
 ## The problem
 
-Solo founders can delegate research, planning, outreach, and operations to AI
-agents. Delegation becomes dangerous when the same agents can contact a
-customer, commit to a deadline, or spend money without a clear authority
-boundary. Prompt instructions are not an enforcement layer.
+A solo founder can delegate research, drafting, outreach, operations, and
+payments to agents. But a prompt such as "ask before spending" is not an
+enforcement layer. The same model that proposes an action must not be allowed
+to authorize it.
 
-SolePilot separates planning from authority:
+SolePilot separates **planning** from **authority**. Model output is treated as
+an untrusted proposal until a typed action passes deterministic policy and the
+governed tool adapter independently checks the result again.
 
-1. A planner proposes a typed execution plan.
-2. The policy engine evaluates each proposed tool call.
-3. Routine internal work runs inside delegated authority.
-4. External sends, commitments, and spending pause for an action-bound owner capability.
-5. Policy violations fail closed before tool invocation.
-6. Each terminal outcome is committed to a hash-linked receipt ledger.
+## The five-part story
 
-## Judge path
+**1. Agents receive bounded mandates, not blank checks.** The owner defines the
+objective, stakeholder, deadline, budget cap, and payment intent. The planner
+can propose only known action kinds and allow-listed tools.
 
-The public demo offers two runtime modes:
+**2. Policy runs before the tool.** Every action resolves to `ALLOW`, `REVIEW`,
+or `BLOCK`. Routine internal work proceeds. External sends, commitments, and
+payments pause. Violations fail before connector invocation.
 
-- **Replay** is a deterministic, zero-configuration run. It requires no account
-  or API key and exercises `ALLOW`, `REVIEW`, and `BLOCK` paths.
-- **Online agent** generates a typed plan through a no-login same-origin server
-  endpoint, retrieves current external evidence through server-side research
-  adapters, produces an evidence-backed artifact, and pauses before a real Telegram delivery.
-  Delivery requires the owner's connector code and returns a real
-  provider message ID. It does not inject synthetic policy violations into a
-  normal mission; spending appears only when the objective explicitly requests it.
-- **Solana payment** captures an explicit payee, Devnet recipient address, SOL
-  amount, owner cap, purpose, deadline, and execution requirements. SolePilot
-  seals those fields into the governed action, pauses at the owner boundary,
-  and asks the owner's OKX Wallet or Phantom extension to sign the exact
-  transfer. A confirmed transaction produces a signature and Solana Explorer
-  link in the artifact and receipt ledger.
+**3. Approval is a capability, not a boolean.** Owner approval issues a
+five-minute, single-use capability bound to the full action, mission, policy
+result, and nonce. Reuse or mutation fails closed.
 
-The **Missions** workspace keeps multiple independent runtimes in one control
-plane. Each mission preserves its own plan, statuses, policy state, artifacts,
-and receipt ledger while the owner switches between operations.
+**4. Real integrations preserve the trust boundary.** Online research uses
+current external evidence and server-attested results. Telegram uses a fixed
+server-side destination plus an owner code. Solana payment remains
+non-custodial: the wallet extension signs the exact Devnet transfer after
+policy and owner review.
 
-For the shortest complete run:
+**5. Every terminal outcome becomes proof.** A receipt commits the policy
+decision, owner capability, artifact digest, outcome, sequence, and previous
+receipt hash. The product exposes the canonical payload and verifies the chain
+in-browser.
 
-1. Select **Run mission** for the zero-configuration policy walkthrough.
-2. Inspect the research and drafting artifacts.
-3. Approve the paused sandbox outbox call, then continue.
-4. Approve the in-budget sandbox reservation, then continue.
-5. Observe the over-cap reservation fail before invocation.
-6. Open **Receipt ledger** and select **Verify chain**.
-7. Create a custom mission and select **Online agent**.
-8. Inspect live evidence URLs and the server-attested research request.
-9. At the delivery boundary, enter the owner connector code and approve.
-10. Inspect the Telegram message ID, provider reference, and sealed receipt.
+## Proof, not promises
 
-Open **Missions** at any time to create another runtime or resume a different
-mission without discarding the current execution history.
+| Surface | Competition build | Verification |
+| --- | --- | --- |
+| Planner | Live same-origin typed planner | `POST /api/plans` |
+| Research | Wikipedia + Hacker News evidence | provider URLs + request ID |
+| Delivery | Owner-approved Telegram connector | provider message ID + attestation |
+| Policy | Deterministic pre-tool gate | 24 focused tests |
+| Approval | Single-use action capability | replay and mutation negative tests |
+| Payment | OKX Wallet / Phantom, Solana Devnet | wallet signature + Explorer URL |
+| Audit | Hash-linked canonical receipts | in-browser verification + JSON export |
 
-For a real payment run, select **New mission**, choose **Governed payment**, enter
-the vendor and payment instruction, and create the payment mission. Run the
-authorization step, inspect the exact recipient and amount in Policy Inspector,
-then select **Approve & pay**. The wallet extension remains the final signing
-boundary. This public build intentionally supports Solana Devnet only.
+Run the deployed proof from a terminal:
 
-Replay external actions remain sandboxed by design. Online work missions use a fixed
-Telegram destination protected by a server-side owner code. Spending remains
-within the owner cap and sandbox-authorized; over-cap stress testing remains in
-Replay. Solana payment missions are non-custodial: the planner never receives a
-seed phrase or private key, and the browser asks the owner's wallet extension to
-sign only after policy evaluation and explicit approval.
+```bash
+npm install
+npm run smoke:live
+```
 
-## Runtime architecture
+The smoke test exercises the online planner, retrieves live research evidence,
+verifies its server attestation, then submits an invalid over-cap payment
+intent and asserts that the server fails closed. See [EVIDENCE.md](./EVIDENCE.md)
+for the complete claim-to-proof matrix and honest deployment labels.
+
+## Architecture
 
 ```mermaid
 flowchart LR
-  O[Mission portfolio] --> P[Replay or server planner]
-  P --> V[Schema normalization]
-  V --> G[Deterministic policy gate]
-  G -->|ALLOW| T[Governed tool adapter]
-  G -->|REVIEW| A[Owner approval]
-  A -->|one-time capability| T
-  A -->|reject| R[Rejected receipt]
-  G -->|BLOCK| B[Blocked receipt]
-  T --> X[Tool or payment adapter]
-  X --> F[Online provider or local artifact]
-  F --> H[Hash-linked receipt]
+  O["Owner mandate"] --> P["Agent planner"]
+  P --> N["Schema normalizer"]
+  N --> G{"Deterministic policy gate"}
+  G -->|ALLOW| T["Governed tool adapter"]
+  G -->|REVIEW| A["Owner approval"]
+  A -->|single-use capability| T
+  A -->|reject| R["Rejected receipt"]
+  G -->|BLOCK| B["Blocked receipt"]
+  T --> X["Online provider or wallet"]
+  X --> H["Hash-linked receipt"]
   R --> H
   B --> H
 ```
 
-The tool adapter independently re-evaluates policy. Calling it outside the UI
-does not bypass governance: reviewed calls require a matching, unexpired,
-single-use owner capability, and blocked calls always throw before execution.
+`executeGovernedAction` evaluates policy again at the tool boundary. Calling a
+connector outside the UI does not bypass governance: reviewed calls require a
+matching unexpired capability, and blocked calls throw before execution.
 
-See [ARCHITECTURE.md](./ARCHITECTURE.md) for trust boundaries, receipt details,
-and the production replacement plan.
+Read [ARCHITECTURE.md](./ARCHITECTURE.md) for trust boundaries, receipt
+construction, online connector design, payment routing, limitations, and the
+production replacement plan. [SECURITY.md](./SECURITY.md) documents the threat
+model, enforced invariants, adversarial test coverage, and remaining risks.
+
+## 90-second judge path
+
+1. Open [the live product](https://solepilot.vercel.app) and select **Proof**.
+2. Select **Start 90-second proof**, then **Run mission**.
+3. Inspect the delegated research and drafting artifacts.
+4. Approve or reject the paused external send.
+5. Continue until the over-cap reservation is blocked before invocation.
+6. Open **Ledger**, expand a receipt, and inspect its canonical payload.
+7. Select **Verify chain**.
+
+Replay requires no account or API key. For a real online mission, create a new
+**Work delivery** mission and choose **Online agent**. For a wallet-dependent
+flow, create a **Governed payment** mission and inspect the exact recipient,
+amount, cap, purpose, and requirements before approving the Devnet signature.
 
 ## What is implemented
 
-- Custom mission composition with configurable stakeholder, deadline, and cap
 - Multi-mission control plane with independent resumable runtimes
-- Versioned workspace persistence with migration from the original single-runtime schema
-- No-login same-origin server planner with a deterministic local fallback
-- Server-side online research using Wikipedia and Hacker News
-- Real owner-approved Telegram delivery through a fixed-destination connector
-- Chain-neutral payment intents covering scheme, network, asset, amount, cap,
-  recipient, resource, purpose, deadline, and execution requirements
-- Payment adapter registry with Solana Devnet as the first executable adapter
-- Non-custodial OKX Wallet and Phantom signing with confirmed transaction and
-  Explorer evidence
-- Five-minute, action-bound approval capabilities consumed before external invocation
-- Provider request IDs, evidence URLs, message IDs, and HMAC attestations
-- Deterministic Replay planner for reliable evaluation
-- Typed tools for workspace search, document composition, outbox delivery,
-  commitments, and budget reservation
-- Fail-closed owner policies for sensitive data, budget, and consequential work
-- Owner approve/reject queue with resumable execution
-- Tool artifacts and an inspectable runtime trace
-- Local persistence across refreshes
-- Hash-linked receipts with artifact digests and JSON export
-- In-browser receipt-chain verification
-- Production Next.js API runtime deployed on Vercel
-- Responsive keyboard-accessible workspace
+- Typed server and deterministic replay planners
+- Deterministic `ALLOW`, `REVIEW`, and `BLOCK` policy outcomes
+- Policy re-evaluation at the governed tool boundary
+- Five-minute, single-use, action-bound owner capabilities
+- Live public research with request IDs, evidence URLs, and HMAC attestations
+- Real fixed-destination Telegram delivery behind an owner connector code
+- Chain-neutral payment intents and an executable Solana Devnet adapter
+- Non-custodial OKX Wallet and Phantom signing
+- Hash-linked receipts with artifact digests and canonical payload inspection
+- In-browser chain verification and JSON export
+- Local-first, versioned multi-mission persistence
+- Responsive keyboard-accessible control plane
 
 ## Verification
 
@@ -137,23 +151,14 @@ npm install
 npm test
 npm run typecheck
 npm run build
+npm run smoke:live
 ```
 
-The test suite covers:
-
-- delegated research
-- owner review before external delivery
-- over-cap blocking
-- canonical serialization
-- deterministic receipt IDs
-- model-plan normalization
-- no-login online plan generation
-- evidence-backed drafting without an external model session
-- direct tool-adapter bypass attempts
-- payment-intent tampering, over-cap payment, and unsigned transfer attempts
-- approval-capability replay and changed-action attempts
-- approved sandbox execution
-- receipt-chain tamper detection
+The focused test suite covers routine delegation, owner review, over-cap
+blocking, canonical serialization, deterministic receipts, typed online plans,
+payment-intent tampering, expired intents, unsigned transfers, direct adapter
+bypass attempts, capability replay, changed-action attempts, live evidence
+artifacts, and receipt-chain tampering.
 
 ## Local development
 
@@ -162,11 +167,8 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:3000. Replay mode works offline after the application has
-loaded. Online Agent requires network access to the same-origin planning and
-research APIs, but no third-party account or model login.
-
-To enable real Telegram delivery, copy `.env.example` to `.env.local` and set:
+Open `http://localhost:3000`. Replay works without credentials. To enable all
+online connectors, copy `.env.example` to `.env.local` and set:
 
 ```bash
 TELEGRAM_BOT_TOKEN=...
@@ -175,15 +177,27 @@ SOLEPILOT_OWNER_CODE=...
 SOLEPILOT_ATTESTATION_SECRET=...
 ```
 
-The bot token and destination never reach the browser. The owner code is sent
-only when an owner releases a paused action and is not stored in local storage.
+Provider tokens and the Telegram destination never reach the browser. Approval
+capabilities are not persisted. SolePilot never receives a wallet private key.
+
+## Deployment boundary
+
+This competition build is explicit about what is real:
+
+- **Replay:** real governance and receipts, sandbox tool outputs.
+- **Online Agent:** real Vercel APIs, external research, attestations, and
+  owner-approved Telegram delivery.
+- **Solana payment:** real non-custodial wallet path on Devnet only.
+- **Production plan:** tenant storage, passkey approvals, and mainnet adapters
+  are documented replacements, not hidden claims.
 
 ## BUIDL_QUESTS 2026
 
 - Primary track: OPC / Super Individuals
 - Theme alignment: Autonomous Agents and Sovereignty
 - Development started: July 20, 2026
-- Repository: built during the official competition window
+- Public product: https://solepilot.vercel.app
+- OpenArena: https://openarena.to/en/projects/cmrsq528y000004juvcenfwl5
 
 ## License
 
