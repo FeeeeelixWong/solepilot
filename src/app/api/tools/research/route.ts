@@ -161,7 +161,7 @@ export async function POST(request: NextRequest) {
     .replace(/[^a-z0-9\s-]/g, " ")
     .split(/\s+/)
     .filter((term) => term.length > 2 && !stopWords.has(term));
-  const query = ([customer, ...objectiveTerms.slice(0, 3)].filter(Boolean).join(" ") || objective).slice(0, 120);
+  const query = (objectiveTerms.slice(0, 5).join(" ") || customer || objective).slice(0, 120);
   const wikipediaUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&srlimit=3&format=json`;
   const hackerNewsUrl = `https://hn.algolia.com/api/v1/search?query=${encodeURIComponent(query)}&tags=story&hitsPerPage=3`;
 

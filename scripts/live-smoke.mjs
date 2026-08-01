@@ -28,7 +28,7 @@ assert.equal(health.attestation, true, "attestation boundary must be configured"
 const missionDraft = {
   objective: "Research autonomous agent governance and prepare an owner-approved briefing",
   customer: "BUIDL_QUESTS reviewers",
-  source: "Public web evidence",
+  source: "https://en.wikipedia.org/wiki/Agentic_commerce",
   contactEmail: "reviewer@example.com",
   deadline: "2026-08-12",
   budgetCapUsd: 120,
