@@ -5,6 +5,7 @@ export const demoDraft: MissionDraft = {
     "Qualify the opportunity, prepare a scoped proposal, and secure owner approval before making any external commitment.",
   customer: "Northstar Protocol",
   source: "Inbound product brief",
+  contactEmail: "founder@northstar.example",
   deadline: "2026-07-24",
   budgetCapUsd: 120,
   missionType: "work",

@@ -123,6 +123,7 @@ export function createReplayPlan(draft: MissionDraft): Mission {
 
 export function createOnlinePlan(draft: MissionDraft): Mission {
   const safeBudget = Math.max(1, Number(draft.budgetCapUsd) || 100);
+  const objectiveSentence = draft.objective.trim().replace(/[.!?]+$/, "");
   if (draft.missionType === "payment" && draft.payment) {
     const payment = draft.payment;
     const actions: AgentAction[] = [
@@ -162,49 +163,37 @@ export function createOnlinePlan(draft: MissionDraft): Mission {
     };
   }
 
-  const requestsSpend = /\b(buy|purchase|pay|subscribe|reserve|budget|spend)\b|购买|采购|付费|支付|订阅|预算|花费/i
-    .test(draft.objective);
   const actions: AgentAction[] = [
     makeAction(0, "research", "online", {
       agent: "Scout",
-      title: `Research ${draft.source}`,
-      description: `Collect live evidence relevant to ${draft.objective} for ${draft.customer}.`,
+      title: `Research ${draft.customer}`,
+      description: `Review the supplied source and collect current public evidence relevant to ${objectiveSentence}.`,
     }),
     makeAction(1, "draft", "online", {
       agent: "Planner",
-      title: "Synthesize an execution brief",
+      title: "Draft a customer-ready proposal",
       description:
-        "Turn the retrieved evidence into a bounded brief with findings, acceptance criteria, and exclusions.",
+        "Turn the evidence into a concise proposal with a recommendation, deliverables, timeline, and next step.",
     }),
   ];
 
-  if (requestsSpend) {
-    actions.push(makeAction(actions.length, "spend", "online", {
-      agent: "Operator",
-      title: "Reserve approved execution budget",
-      description: "Request an owner-reviewed sandbox reservation within the mission budget cap.",
-      amountUsd: Math.max(1, Math.round(safeBudget * 0.4)),
-      destination: "Tooling sandbox",
-    }));
-  }
-
   actions.push(makeAction(actions.length, "external-send", "online", {
     agent: "Closer",
-    title: "Deliver the approved brief",
+    title: "Prepare the approved email handoff",
     description:
-      "Release the final artifact through the fixed-destination Telegram connector after owner approval.",
-    destination: "Owner Telegram delivery channel",
+      "Package the proposal for the owner's email client after approval. SolePilot will not send it automatically.",
+    destination: draft.contactEmail?.trim() || "Owner email client",
   }));
 
   return {
     id: missionId(),
-    title: titleFromObjective(draft.objective),
+    title: `Proposal for ${draft.customer}`,
     ...draft,
     budgetCapUsd: safeBudget,
     status: "ready",
     planSource: "live-ai",
     executionMode: "online",
-    plannerModel: "SolePilot server planner v2",
+    plannerModel: "SolePilot customer-work planner v3",
     actions,
   };
 }
@@ -245,7 +234,7 @@ function normalizePlan(raw: unknown, draft: MissionDraft): Mission {
       title: cleanText(value.title, `Execute step ${index + 1}`, 80),
       description: cleanText(value.description, "Execute the proposed mission step."),
       destination: typedKind === "external-send"
-        ? "Owner Telegram delivery channel"
+        ? draft.contactEmail?.trim() || "Owner email client"
         : typeof value.destination === "string"
           ? cleanText(value.destination, "Owner workspace", 100)
           : undefined,
@@ -287,6 +276,7 @@ Create a concise execution plan for this mission.
 Objective: ${draft.objective}
 Stakeholder: ${draft.customer}
 Source: ${draft.source}
+Contact email: ${draft.contactEmail || "Not supplied"}
 Deadline: ${draft.deadline}
 Owner budget cap: $${draft.budgetCapUsd}
 
@@ -294,11 +284,11 @@ Return JSON only with this shape:
 {"title":"...","actions":[{"agent":"Scout|Planner|Closer|Operator","title":"...","description":"...","kind":"research|draft|external-send|commercial-commitment|spend","destination":"optional","amountUsd":0,"containsSensitiveData":false}]}
 
 Requirements:
-- 4 to 6 actions in execution order.
+- 3 to 5 actions in execution order.
 - Include research and drafting.
 - Include at least one consequential external action that should require owner approval.
-- Include one external-send action that delivers the final artifact after owner approval.
-- Include one optional spend above the cap, so fail-closed policy enforcement is observable without moving funds.
+- Include one external-send action that prepares the final artifact for an owner-controlled email handoff.
+- Do not add spending unless the objective explicitly requires it.
 - Do not claim that an external action has already happened.`;
 }
 

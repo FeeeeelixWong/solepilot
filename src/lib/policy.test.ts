@@ -120,28 +120,30 @@ test("server planner creates a complete online plan without browser authenticati
   });
 
   assert.equal(mission.executionMode, "online");
-  assert.equal(mission.plannerModel, "SolePilot server planner v2");
+  assert.equal(mission.plannerModel, "SolePilot customer-work planner v3");
   assert.equal(mission.actions[0].toolName, "web.search");
   assert.ok(mission.actions.some((action) => action.toolName === "outbox.send"));
   assert.equal(mission.actions.length, 3);
   assert.ok(mission.actions.every((action) => (action.amountUsd ?? 0) <= 50));
 });
 
-test("server planner adds only an in-cap spend when the objective requests payment", () => {
+test("customer-work planner does not fabricate a purchase step", () => {
   const mission = createOnlinePlan({
-    objective: "Research the market, purchase an API plan, and deliver the brief",
+    objective: "Research the market, purchase an API plan, and deliver the brief.",
     customer: "Owner",
     source: "Agent infrastructure",
     deadline: "2026-08-01",
     budgetCapUsd: 50,
     missionType: "work",
+    contactEmail: "owner@example.com",
   });
   const spend = mission.actions.find((action) => action.kind === "spend");
 
-  assert.ok(spend);
-  assert.equal(spend.amountUsd, 20);
-  assert.ok((spend.amountUsd ?? Infinity) <= mission.budgetCapUsd);
+  assert.equal(spend, undefined);
+  assert.equal(mission.actions.length, 3);
+  assert.doesNotMatch(mission.actions[0].description, /\.\.$/);
   assert.equal(mission.actions.at(-1)?.toolName, "outbox.send");
+  assert.equal(mission.actions.at(-1)?.destination, "owner@example.com");
 });
 
 test("payment planner preserves the owner-entered transfer payload", () => {
@@ -459,6 +461,52 @@ test("an action-bound approval capability releases a reviewed sandbox tool", asy
 
   assert.equal(artifact.provider, "sandbox");
   assert.match(artifact.content, /No live message was sent/);
+});
+
+test("an approved online handoff prepares email content without sending it", async () => {
+  const mission = createOnlinePlan({
+    objective: "Research a prospect and prepare a proposal",
+    customer: "Northstar",
+    source: "https://example.com",
+    contactEmail: "founder@example.com",
+    deadline: "2027-08-01",
+    budgetCapUsd: 100,
+    missionType: "work",
+  });
+  const action = mission.actions.find((candidate) => candidate.toolName === "outbox.send");
+  assert.ok(action);
+  const policies = [
+    { id: "policy-owner-approval", name: "Owner approval", description: "", enabled: true },
+  ];
+  const approvalCapability = await issueApprovalCapability(
+    action,
+    mission,
+    evaluateAction(action, mission, policies),
+  );
+  const { artifact } = await executeGovernedAction({
+    action,
+    mission,
+    mode: "live-ai",
+    policies,
+    previousArtifacts: [{
+      id: "artifact_proposal",
+      missionId: mission.id,
+      actionId: mission.actions[1].id,
+      toolName: "document.compose",
+      provider: "deterministic",
+      title: "Proposal",
+      summary: "Proposal ready",
+      content: "Customer proposal body",
+      createdAt: "2026-08-01T00:00:00.000Z",
+    }],
+    approvalCapability,
+  });
+
+  assert.equal(artifact.provider, "owner-handoff");
+  assert.equal(artifact.delivery?.recipient, "founder@example.com");
+  assert.equal(artifact.delivery?.subject, "Proposal for Northstar");
+  assert.equal(artifact.content, "Customer proposal body");
+  assert.match(artifact.summary, /No message was sent automatically/);
 });
 
 test("an approval capability cannot be replayed", async () => {

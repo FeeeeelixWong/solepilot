@@ -66,19 +66,32 @@ function deterministicContent(
       }
       return {
         provider: "deterministic",
-        summary: "Produced a scoped brief with acceptance criteria and exclusions.",
+        summary: `Prepared a customer-ready proposal for ${mission.customer}.`,
         content: [
-          `Execution brief: ${mission.title}`,
-          `Objective: ${mission.objective}`,
-          `Stakeholder: ${mission.customer}`,
-          `Deadline: ${mission.deadline}`,
+          `PROPOSAL FOR ${mission.customer.toUpperCase()}`,
           "",
-          "Evidence findings:",
+          "Goal",
+          mission.objective,
+          "",
+          "What we learned",
           evidence || "No prior artifact.",
           evidenceLinks ? `\nSource links:\n${evidenceLinks}` : "",
           "",
-          "Acceptance: deliver a reviewable result, preserve owner approval, and record every action.",
-          "Exclusions: no live payment, binding commitment, or external delivery without approval.",
+          "Recommended scope",
+          `1. Confirm the desired outcome with ${mission.customer}.`,
+          "2. Deliver the work described above using the cited evidence as the starting point.",
+          "3. Review the result against the agreed success criteria before any external commitment.",
+          "",
+          "Timeline",
+          `Complete the agreed scope by ${mission.deadline}.`,
+          "",
+          "Success criteria",
+          "- The recommendation is supported by traceable sources.",
+          "- The final deliverable directly addresses the stated goal.",
+          "- Any change to scope, price, or external commitment returns to the owner for approval.",
+          "",
+          "Next step",
+          "Reply with any constraints or corrections, then confirm the scope before work begins.",
         ].filter(Boolean).join("\n"),
       };
     case "outbox.send":
@@ -102,6 +115,50 @@ function deterministicContent(
     case "wallet.transfer":
       throw new Error("Solana transfers must run through the owner wallet adapter.");
   }
+}
+
+function isTelegramDelivery(action: AgentAction): boolean {
+  return action.destination === "Owner Telegram delivery channel";
+}
+
+async function createOwnerHandoff(
+  action: AgentAction,
+  mission: Mission,
+  previousArtifacts: ToolArtifact[],
+): Promise<ToolArtifact> {
+  const proposal = [...previousArtifacts]
+    .reverse()
+    .find((artifact) => artifact.toolName === "document.compose");
+  if (!proposal) {
+    throw new Error("A completed proposal is required before preparing the email handoff.");
+  }
+
+  const recipient = mission.contactEmail?.trim() || undefined;
+  const subject = /^proposal for\b/i.test(mission.title)
+    ? mission.title
+    : `Proposal for ${mission.customer}: ${mission.title}`;
+  const content = proposal.content.trim();
+  const fingerprint = await sha256(canonicalize({
+    actionId: action.id,
+    content,
+    missionId: mission.id,
+    recipient: recipient ?? "owner-selects-recipient",
+    subject,
+    toolName: action.toolName,
+  }));
+
+  return {
+    id: `artifact_${fingerprint.slice(0, 18)}`,
+    missionId: mission.id,
+    actionId: action.id,
+    toolName: action.toolName,
+    provider: "owner-handoff",
+    title: "Email handoff ready",
+    summary: "Prepared the approved proposal for your email client. No message was sent automatically.",
+    content,
+    delivery: { recipient, subject },
+    createdAt: new Date().toISOString(),
+  };
 }
 
 async function aiContent(
@@ -179,6 +236,9 @@ async function executeTool(
     return onlineArtifact(action, mission, await runOnlineResearch(action, mission));
   }
   if (mission.executionMode === "online" && action.toolName === "outbox.send") {
+    if (!isTelegramDelivery(action)) {
+      return createOwnerHandoff(action, mission, previousArtifacts);
+    }
     return onlineArtifact(
       action,
       mission,
@@ -216,9 +276,18 @@ async function executeTool(
     };
   }
 
-  const result = mode === "live-ai" && complete
-    ? await aiContent(action, mission, previousArtifacts, complete)
-    : deterministicContent(action, mission, previousArtifacts);
+  let result = deterministicContent(action, mission, previousArtifacts);
+  if (mode === "live-ai" && complete) {
+    try {
+      result = await aiContent(action, mission, previousArtifacts, complete);
+    } catch {
+      result = {
+        ...result,
+        provider: "deterministic-fallback",
+        summary: `${result.summary} AI drafting was unavailable, so SolePilot used its local proposal template.`,
+      };
+    }
+  }
   const fingerprint = await sha256(
     canonicalize({
       actionId: action.id,

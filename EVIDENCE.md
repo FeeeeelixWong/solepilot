@@ -18,6 +18,7 @@ deterministic proofs, wallet-dependent flows, and production plans.
 | A server planner returns typed, allow-listed actions | LIVE | `npm run smoke:live` | [`POST /api/plans`](./src/app/api/plans/route.ts) |
 | Research retrieves current external evidence | LIVE | `npm run smoke:live` | [`POST /api/tools/research`](./src/app/api/tools/research/route.ts) |
 | Online tool results are server-attested and verified | LIVE | `npm run smoke:live` | [attestation boundary](./src/lib/server/attestation.ts) |
+| Approved proposals become an owner-controlled email handoff without auto-send | DETERMINISTIC | Run a live customer task and approve the handoff | [governed adapter](./src/lib/tools.ts) |
 | Telegram delivery pauses for an owner code and uses a fixed server destination | LIVE | Run an Online Agent mission in the product | [Telegram route](./src/app/api/tools/telegram/route.ts) |
 | Policy runs before connector invocation | DETERMINISTIC | Run the default mission or `npm test` | [`evaluateAction`](./src/lib/policy.ts) and [`executeGovernedAction`](./src/lib/tools.ts) |
 | Reviewed actions require an unexpired, single-use, action-bound capability | DETERMINISTIC | `npm test` | [capability implementation](./src/lib/capability.ts) |
@@ -60,8 +61,9 @@ local server.
 ## Honest boundary
 
 Replay uses real policy, capability, tool-adapter, artifact, and receipt code,
-but sandbox tool outputs. Online Agent uses real same-origin server routes,
-live public research sources, HMAC attestations, and an owner-controlled
-Telegram connector. Solana payment uses a real wallet prompt and Devnet
+but sandbox tool outputs. Online work uses real same-origin server routes,
+owner-supplied public pages, live public research sources, HMAC attestations,
+and a local owner-controlled email handoff. Telegram remains an optional proof
+connector. Solana payment uses a real wallet prompt and Devnet
 transaction path, but this repository does not claim a bundled public payment
 signature until a reviewer or owner executes that wallet-dependent flow.

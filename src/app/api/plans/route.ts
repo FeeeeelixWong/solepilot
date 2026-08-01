@@ -37,7 +37,10 @@ export async function POST(request: NextRequest) {
   const draft: MissionDraft = {
     objective: payment?.purpose ?? cleanText(body?.objective, 500),
     customer: payment?.payeeName ?? cleanText(body?.customer, 120),
-    source: payment ? "Owner-entered payment instruction" : cleanText(body?.source, 180),
+    source: payment
+      ? "Owner-entered payment instruction"
+      : cleanText(body?.source, 500) || cleanText(body?.customer, 120),
+    contactEmail: payment ? undefined : cleanText(body?.contactEmail, 254) || undefined,
     deadline: cleanText(body?.deadline, 20),
     budgetCapUsd,
     missionType,

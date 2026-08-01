@@ -8,17 +8,19 @@ It does not treat model output as authorization. Model-generated actions are
 untrusted proposals until they pass schema normalization and policy evaluation.
 
 The public competition build has two execution surfaces. Replay is a client-side
-reference runtime that any judge can run without credentials. Online Agent uses
-same-origin Next.js route handlers for live research and owner-approved Telegram
-delivery. The server keeps provider credentials and the fixed destination out
-of model and browser contexts. Solana payment missions use a separate,
+reference runtime that any judge can run without credentials. Online work uses
+same-origin Next.js route handlers for live research, deterministic proposal
+composition, and an owner-approved email handoff that does not send
+automatically. A fixed-destination Telegram connector remains available as an
+optional proof adapter; the server keeps its credentials and destination out of
+model and browser contexts. Solana payment missions use a separate,
 non-custodial client connector: the normalized payment intent is reviewed by
 policy first, and only the owner's wallet extension can sign the resulting
 Devnet transaction.
 
 ## Execution sequence
 
-1. The owner supplies an objective, stakeholder, deadline, and budget cap.
+1. The owner supplies an objective, stakeholder, public source, optional contact, and deadline.
 2. Replay or the same-origin server planner returns a typed `AgentAction[]` plan.
 3. The normalizer accepts only known action kinds and maps each kind to an
    allow-listed tool.
@@ -47,7 +49,9 @@ Devnet transaction.
 - Governed tool adapter
 - Canonical serializer and SHA-256 receipt builder
 - Receipt-chain verifier
-- Server-side fixed-destination connector and result attestation boundary
+- Server-side research and attestation boundary
+- Local owner-controlled email handoff
+- Optional server-side fixed-destination connector
 
 An optional AI provider cannot choose a tool outside the allow-list and cannot
 override a policy result. Owner approval can release `review` actions but cannot
@@ -95,15 +99,20 @@ changes all fail closed.
 `POST /api/plans` validates bounded mission input and returns a typed online
 plan from the reliable server planner. It requires no browser popup, external
 account, or model credential. An optional model planner can still be injected
-behind the same normalizer without changing policy semantics. Normal online
-plans never inject a synthetic violation: a spend action is proposed only when
-the objective requests one, and its amount remains inside the owner cap. Replay
-retains the deterministic over-cap case for policy stress testing.
+behind the same normalizer without changing policy semantics. The default
+customer-work planner proposes only research, proposal composition, and the
+owner-controlled handoff. Replay retains spending and the deterministic
+over-cap case for policy stress testing.
 
-`POST /api/tools/research` accepts bounded mission context, queries allow-listed
-public sources, labels returned text as untrusted evidence, and returns source
-URLs plus a signed execution result. The browser verifies that result through
+`POST /api/tools/research` accepts bounded mission context, validates that an
+owner-supplied URL resolves to public network addresses, reads bounded HTML or
+plain text, queries additional public sources, labels all returned text as
+untrusted evidence, and returns source URLs plus a signed execution result. The browser verifies that result through
 `POST /api/attestations/verify` before accepting it as a tool artifact.
+
+The default `outbox.send` adapter creates a local handoff artifact containing
+the approved proposal, recipient, and subject. The owner may copy, download, or
+open that artifact in an email client. SolePilot never submits the email.
 
 `POST /api/tools/telegram` requires the owner connector code, accepts only a
 completed artifact, and sends to the server-configured chat. Callers cannot
@@ -142,7 +151,7 @@ replace adapters without changing policy semantics:
 | --- | --- |
 | Browser multi-mission workspace | Encrypted workspace database with tenant isolation |
 | Reliable server planner | Organization-managed model gateway with schema-constrained output |
-| Fixed Telegram outbox | Email/CRM connectors with per-tenant scoped OAuth |
+| Owner-controlled email handoff | Email/CRM connectors with per-tenant scoped OAuth |
 | Solana Devnet wallet adapter | Production network adapter with transaction simulation, allow-listed assets, and per-transaction authorization |
 | Browser-issued action capability | Passkey-signed approval capability |
 | SHA-256 receipt chain | Signed append-only log with external timestamp anchor |

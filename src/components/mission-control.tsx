@@ -14,6 +14,7 @@ import {
   Circle,
   Cloud,
   Clock3,
+  Copy,
   Download,
   ExternalLink,
   FileCheck2,
@@ -22,6 +23,7 @@ import {
   Inbox,
   ListChecks,
   LockKeyhole,
+  Mail,
   KeyRound,
   Play,
   Plus,
@@ -177,7 +179,14 @@ export function MissionControl() {
     setArtifacts(runtime.artifacts);
     setEvents(runtime.events);
     setPlannerMode(runtime.plannerMode);
-    setSelectedActionId(runtime.mission.actions[0]?.id ?? "");
+    const selected = runtime.mission.actions.find(
+      (action) => runtime.statuses[action.id] === "awaiting-owner",
+    ) ?? runtime.mission.actions.find(
+      (action) => runtime.statuses[action.id] === "running",
+    ) ?? [...runtime.mission.actions].reverse().find(
+      (action) => runtime.statuses[action.id] === "complete",
+    ) ?? runtime.mission.actions[0];
+    setSelectedActionId(selected?.id ?? "");
     setVerification(null);
     setOwnerCode("");
     receiptRef.current = runtime.receipts;
@@ -456,6 +465,7 @@ export function MissionControl() {
     const action = mission.actions.find((candidate) => candidate.id === actionId);
     if (!action || statuses[actionId] !== "awaiting-owner" || isRunning) return;
 
+    setSelectedActionId(action.id);
     setIsRunning(true);
     if (outcome === "reject") {
       setStatuses((current) => ({ ...current, [actionId]: "blocked" }));
@@ -817,15 +827,15 @@ export function MissionControl() {
       {composerOpen ? (
         <MissionComposer
           initialDraft={{
-            objective: composerSeed || mission.objective || demoDraft.objective,
-            customer: mission.customer || demoDraft.customer,
-            source: mission.source || demoDraft.source,
-            deadline: mission.deadline || demoDraft.deadline,
-            budgetCapUsd: mission.budgetCapUsd || demoDraft.budgetCapUsd,
-            missionType: mission.missionType ?? "work",
-            payment: mission.payment,
+            objective: composerSeed,
+            customer: "",
+            source: "",
+            contactEmail: "",
+            deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+            budgetCapUsd: 100,
+            missionType: "work",
           }}
-          initialMode={plannerMode}
+          initialMode="live-ai"
           onClose={() => { setComposerOpen(false); setComposerSeed(""); }}
           onCreate={createMission}
         />
@@ -881,8 +891,8 @@ function LandingView({ onCreate, onOpenTasks, onRunDemo, runtimeHealth }: {
         <p className="eyebrow">SOLEPILOT CONTROL PLANE</p>
         <h1>AI operations for one-person companies.</h1>
         <p className="landing-subtitle">
-          Delegate the work. Keep authority. Your AI team researches, drafts, and prepares actions. SolePilot pauses before
-          messages, spending, payments, or commitments leave your company.
+          Give SolePilot a customer and an outcome. It researches the opportunity, drafts a proposal, and hands the final
+          email back to you. Nothing is sent until you decide.
         </p>
         <form className="command-entry" onSubmit={submitPrompt}>
           <Bot aria-hidden="true" size={19} />
@@ -896,8 +906,8 @@ function LandingView({ onCreate, onOpenTasks, onRunDemo, runtimeHealth }: {
           <button aria-label="Set up this task" type="submit"><ArrowRight size={18} /></button>
         </form>
         <div className="landing-actions">
-          <button className="button primary" onClick={onRunDemo} type="button"><Play size={16} /> Run guided task</button>
-          <button className="button secondary" onClick={() => onCreate()} type="button"><Plus size={16} /> Build your own</button>
+          <button className="button primary" onClick={() => onCreate()} type="button"><Plus size={16} /> Create a real task</button>
+          <button className="button secondary" onClick={onRunDemo} type="button"><Play size={16} /> Try guided example</button>
         </div>
         <div className="landing-trust">
           <span><ShieldCheck size={14} /> AI cannot approve itself</span>
@@ -918,25 +928,24 @@ function LandingView({ onCreate, onOpenTasks, onRunDemo, runtimeHealth }: {
         </div>
         <div className="preview-body">
           <div className="preview-context">
-            <p className="section-kicker">QUALIFY A NEW CUSTOMER</p>
-            <h2>Research the opportunity and prepare a proposal</h2>
-            <span>2 of 5 steps finished</span>
+            <p className="section-kicker">FROM PROSPECT TO PROPOSAL</p>
+            <h2>Research a customer and prepare the email</h2>
+            <span>2 of 3 steps finished</span>
           </div>
           {preview === "plan" ? (
             <div className="preview-plan" role="tabpanel">
               <div data-state="done"><span><Check size={14} /></span><p><strong>Research the opportunity</strong><small>Market and customer evidence collected</small></p><b>Done</b></div>
               <div data-state="done"><span><Check size={14} /></span><p><strong>Draft the delivery scope</strong><small>Proposal prepared for review</small></p><b>Done</b></div>
-              <div data-state="review"><span>3</span><p><strong>Send the proposal</strong><small>External message requires the owner</small></p><b>Needs you</b></div>
-              <div data-state="blocked"><span>4</span><p><strong>Upgrade the data plan</strong><small>Outside the approved spending limit</small></p><b>Will stop</b></div>
+              <div data-state="review"><span>3</span><p><strong>Prepare email handoff</strong><small>You choose when to send it</small></p><b>Needs you</b></div>
             </div>
           ) : preview === "approval" ? (
             <div className="preview-approval" role="tabpanel">
               <div className="preview-question">
                 <span><UserRoundCheck size={21} /></span>
-                <div><p className="section-kicker">YOUR DECISION</p><h3>Should the AI team send the proposal?</h3><p>Nothing has been sent or committed yet.</p></div>
+                <div><p className="section-kicker">YOUR DECISION</p><h3>Prepare this proposal for your email?</h3><p>SolePilot will open a draft. It will not press Send.</p></div>
               </div>
               <dl><div><dt>Destination</dt><dd>founder@northstar.example</dd></div><div><dt>Reason</dt><dd>External reputation and commercial terms</dd></div></dl>
-              <div className="preview-actions"><button onClick={onRunDemo} type="button"><Check size={15} /> Approve action</button><button onClick={onRunDemo} type="button"><X size={15} /> Reject</button></div>
+              <div className="preview-actions"><button onClick={onRunDemo} type="button"><Check size={15} /> Approve handoff</button><button onClick={onRunDemo} type="button"><X size={15} /> Reject</button></div>
             </div>
           ) : (
             <div className="preview-evidence" role="tabpanel">
@@ -1078,8 +1087,10 @@ function MissionView({
   runtimeHealth: RuntimeHealth | null;
   waitingAction?: AgentAction;
 }) {
+  const [copiedArtifactId, setCopiedArtifactId] = useState<string | null>(null);
   const selectedEvaluation = evaluations[selectedAction.id];
   const selectedArtifact = artifacts.find((artifact) => artifact.actionId === selectedAction.id);
+  const handoffArtifact = artifacts.find((artifact) => artifact.provider === "owner-handoff");
   const activePolicies = policies.filter((policy) => policy.enabled).length;
   const selectedStatus = statuses[selectedAction.id];
   const missionProgress = mission.actions.length === 0
@@ -1104,6 +1115,31 @@ function MissionView({
     : waitingAction?.amountUsd
       ? `$${waitingAction.amountUsd}`
       : null;
+  const waitingUsesTelegram = mission.executionMode === "online" &&
+    waitingAction?.toolName === "outbox.send" &&
+    waitingAction.destination === "Owner Telegram delivery channel";
+
+  async function copyArtifact(artifact: ToolArtifact) {
+    await navigator.clipboard.writeText(artifact.content);
+    setCopiedArtifactId(artifact.id);
+    window.setTimeout(() => setCopiedArtifactId(null), 1_800);
+  }
+
+  function downloadArtifact(artifact: ToolArtifact) {
+    const blob = new Blob([artifact.content], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `${mission.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "solepilot-proposal"}.txt`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function openEmail(artifact: ToolArtifact) {
+    if (!artifact.delivery) return;
+    const recipient = artifact.delivery.recipient ?? "";
+    window.location.href = `mailto:${encodeURIComponent(recipient)}?subject=${encodeURIComponent(artifact.delivery.subject)}&body=${encodeURIComponent(artifact.content)}`;
+  }
 
   return (
     <div className="task-detail">
@@ -1119,7 +1155,7 @@ function MissionView({
               {waitingAmount ? <div><dt>Amount</dt><dd>{waitingAmount}</dd></div> : null}
               <div><dt>Reason</dt><dd>{evaluations[waitingAction.id].reasons[0]}</dd></div>
             </dl>
-            {mission.executionMode === "online" && waitingAction.toolName === "outbox.send" ? (
+            {waitingUsesTelegram ? (
               <label className="owner-code-field">
                 <span><KeyRound size={13} /> Confirmation code</span>
                 <input
@@ -1136,12 +1172,12 @@ function MissionView({
           <div className="decision-banner-actions">
             <button
               className="button approve"
-              disabled={mission.executionMode === "online" && waitingAction.toolName === "outbox.send" && (!runtimeHealth?.telegram || !ownerCode)}
+              disabled={waitingUsesTelegram && (!runtimeHealth?.telegram || !ownerCode)}
               onClick={() => onResolveReview(waitingAction.id, "approve")}
               type="button"
             >
               <Check aria-hidden="true" size={16} />
-              {waitingAction.kind === "payment" ? "Approve payment" : "Approve action"}
+              {waitingAction.kind === "payment" ? "Approve payment" : waitingAction.toolName === "outbox.send" ? "Approve handoff" : "Approve action"}
             </button>
             <button className="button reject" onClick={() => onResolveReview(waitingAction.id, "reject")} type="button">
               <X aria-hidden="true" size={16} /> Reject
@@ -1150,7 +1186,22 @@ function MissionView({
         </section>
       ) : null}
 
-      <section className="task-summary" aria-label="Task summary">
+      {!waitingAction && handoffArtifact ? (
+        <section className="completion-banner" aria-labelledby="completion-title">
+          <span className="completion-icon"><Mail size={21} /></span>
+          <div>
+            <p className="section-kicker">PROPOSAL READY</p>
+            <h2 id="completion-title">Your approved email is ready</h2>
+            <p>Review it once more, then open it in your email client. SolePilot has not sent anything.</p>
+          </div>
+          <div className="completion-actions">
+            <button className="button primary" onClick={() => openEmail(handoffArtifact)} type="button"><Mail size={15} /> Open in email</button>
+            <button className="button secondary" onClick={() => copyArtifact(handoffArtifact)} type="button"><Copy size={15} /> {copiedArtifactId === handoffArtifact.id ? "Copied" : "Copy proposal"}</button>
+          </div>
+        </section>
+      ) : null}
+
+      {!handoffArtifact ? <section className="task-summary" aria-label="Task summary">
         <div>
           <p className="section-kicker">GOAL</p>
           <h2>{mission.objective}</h2>
@@ -1165,11 +1216,11 @@ function MissionView({
           </div>
         </div>
         <dl>
-          <div><dt>Spending limit</dt><dd>{mission.payment ? `${mission.payment.maxAmount} ${mission.payment.asset}` : `$${mission.budgetCapUsd}`}</dd></div>
-          <div><dt>Run mode</dt><dd>{mission.executionMode === "online" ? "Live tools" : "Guided example"}</dd></div>
+          {mission.payment ? <div><dt>Payment limit</dt><dd>{mission.payment.maxAmount} {mission.payment.asset}</dd></div> : <div><dt>Customer</dt><dd>{mission.customer}</dd></div>}
+          <div><dt>Run mode</dt><dd>{mission.executionMode === "online" ? "Live research" : "Guided example"}</dd></div>
           <div><dt>Owner rules</dt><dd>{activePolicies} active</dd></div>
         </dl>
-      </section>
+      </section> : null}
 
       <div className="task-workspace">
         <section className="workflow-panel" aria-label="AI work plan">
@@ -1221,11 +1272,40 @@ function MissionView({
             </dl>
           ) : null}
 
-          {selectedArtifact ? (
+          {selectedArtifact?.provider === "owner-handoff" ? (
+            <section className="handoff-result" aria-label="Approved email handoff">
+              <header>
+                <span><Mail size={18} /></span>
+                <div><p className="section-kicker">READY FOR YOU</p><h3>Email handoff prepared</h3></div>
+              </header>
+              <p>{selectedArtifact.summary}</p>
+              <dl>
+                <div><dt>To</dt><dd>{selectedArtifact.delivery?.recipient || "Choose in your email client"}</dd></div>
+                <div><dt>Subject</dt><dd>{selectedArtifact.delivery?.subject}</dd></div>
+              </dl>
+              <div className="handoff-actions">
+                <button className="button primary" onClick={() => openEmail(selectedArtifact)} type="button"><Mail size={15} /> Open in email</button>
+                <button className="button secondary" onClick={() => copyArtifact(selectedArtifact)} type="button"><Copy size={15} /> {copiedArtifactId === selectedArtifact.id ? "Copied" : "Copy"}</button>
+                <button aria-label="Download proposal" className="button secondary icon-only" onClick={() => downloadArtifact(selectedArtifact)} title="Download proposal" type="button"><Download size={15} /></button>
+              </div>
+              <details>
+                <summary>Preview proposal</summary>
+                <pre>{selectedArtifact.content}</pre>
+              </details>
+            </section>
+          ) : selectedArtifact ? (
             <details className="result-card" open>
               <summary><CheckCircle2 size={15} /> Result ready</summary>
               <p>{selectedArtifact.summary}</p>
-              <pre>{selectedArtifact.content}</pre>
+              {selectedArtifact.toolName === "web.search" ? (
+                <div className="research-result-summary"><Search size={15} /> Reviewed the supplied page and {selectedArtifact.evidence?.length ?? 0} public sources. Open the sources below to inspect the evidence.</div>
+              ) : <pre>{selectedArtifact.content}</pre>}
+              {selectedArtifact.toolName === "document.compose" ? (
+                <div className="result-actions">
+                  <button className="button secondary" onClick={() => copyArtifact(selectedArtifact)} type="button"><Copy size={14} /> {copiedArtifactId === selectedArtifact.id ? "Copied" : "Copy proposal"}</button>
+                  <button aria-label="Download proposal" className="button secondary icon-only" onClick={() => downloadArtifact(selectedArtifact)} title="Download proposal" type="button"><Download size={14} /></button>
+                </div>
+              ) : null}
               {selectedArtifact.externalReference ? (
                 <div className="artifact-proof">
                   <span><Cloud size={13} /> Evidence</span>
@@ -1497,7 +1577,7 @@ function MissionComposer({ initialDraft, initialMode, onClose, onCreate }: {
       : fallbackDeadline,
   });
   const [mode, setMode] = useState(initialMode);
-  const [step, setStep] = useState(1);
+  const [step, setStep] = useState(initialDraft.objective.trim() ? 2 : 1);
   const [isPlanning, setIsPlanning] = useState(false);
   const [error, setError] = useState("");
   const abortController = useRef(new AbortController());
@@ -1546,6 +1626,15 @@ function MissionComposer({ initialDraft, initialMode, onClose, onCreate }: {
     }
     if (
       step === 2 &&
+      draft.missionType === "work" &&
+      draft.contactEmail?.trim() &&
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(draft.contactEmail.trim())
+    ) {
+      setError("Enter a valid contact email or leave it blank.");
+      return;
+    }
+    if (
+      step === 2 &&
       draft.missionType === "payment" &&
       (!payment.payeeName.trim() || !payment.payTo.trim() || !payment.purpose.trim() || payment.amount <= 0)
     ) {
@@ -1560,10 +1649,6 @@ function MissionComposer({ initialDraft, initialMode, onClose, onCreate }: {
     if (step < 3) return;
     if (!draft.deadline || Date.parse(`${draft.deadline}T23:59:59`) < Date.now()) {
       setError("Choose a deadline that has not passed.");
-      return;
-    }
-    if (draft.missionType === "work" && draft.budgetCapUsd <= 0) {
-      setError("Maximum spend must be greater than zero.");
       return;
     }
     if (draft.missionType === "payment" && payment.maxAmount <= 0) {
@@ -1641,6 +1726,17 @@ function MissionComposer({ initialDraft, initialMode, onClose, onCreate }: {
                 <span>Who is this work for?</span>
                 <input autoComplete="organization" onChange={(event) => setDraft((current) => ({ ...current, customer: event.target.value }))} placeholder="Customer, partner, or your own company" value={draft.customer} />
               </label>
+              <div className="form-grid">
+                <label className="form-field">
+                  <span>Website or source <small>recommended</small></span>
+                  <input autoCapitalize="off" autoCorrect="off" onChange={(event) => setDraft((current) => ({ ...current, source: event.target.value }))} placeholder="https://customer.com" spellCheck={false} value={draft.source} />
+                </label>
+                <label className="form-field">
+                  <span>Contact email <small>optional</small></span>
+                  <input autoComplete="email" inputMode="email" onChange={(event) => setDraft((current) => ({ ...current, contactEmail: event.target.value }))} placeholder="name@company.com" type="email" value={draft.contactEmail ?? ""} />
+                </label>
+              </div>
+              <p className="field-note"><ShieldCheck size={14} /> SolePilot reads public sources only. The final message stays in your email client until you send it.</p>
             </div>
           ) : null}
 
@@ -1675,20 +1771,15 @@ function MissionComposer({ initialDraft, initialMode, onClose, onCreate }: {
             <div className="composer-step">
               <div className="boundary-heading">
                 <LockKeyhole size={19} />
-                <div><strong>Set the boundaries</strong><p>SolePilot will stop or ask you before the AI crosses them.</p></div>
+                <div><strong>Confirm how this task will run</strong><p>Research and drafting can run. The final handoff still waits for you.</p></div>
               </div>
               <div className="form-grid">
-                {draft.missionType === "work" ? (
-                  <label className="form-field">
-                    <span>Maximum spend (USD)</span>
-                    <input min="1" onChange={(event) => setDraft((current) => ({ ...current, budgetCapUsd: Number(event.target.value) }))} type="number" value={draft.budgetCapUsd} />
-                  </label>
-                ) : (
+                {draft.missionType === "payment" ? (
                   <label className="form-field">
                     <span>Maximum authorized ({payment.asset})</span>
                     <input min="0.000001" onChange={(event) => updatePayment({ maxAmount: Number(event.target.value) })} step="0.000001" type="number" value={payment.maxAmount} />
                   </label>
-                )}
+                ) : null}
                 <label className="form-field">
                   <span>Finish by</span>
                   <input min={new Date().toISOString().slice(0, 10)} onChange={(event) => setDraft((current) => ({ ...current, deadline: event.target.value }))} type="date" value={draft.deadline} />
@@ -1699,20 +1790,15 @@ function MissionComposer({ initialDraft, initialMode, onClose, onCreate }: {
                   <span>Conditions the payment must match</span>
                   <textarea maxLength={500} onChange={(event) => updatePayment({ requirements: event.target.value })} value={payment.requirements} />
                 </label>
-              ) : (
-                <label className="form-field">
-                  <span>Starting information</span>
-                  <input onChange={(event) => setDraft((current) => ({ ...current, source: event.target.value }))} placeholder="Brief, website, or notes" value={draft.source} />
-                </label>
-              )}
+              ) : <div className="work-boundaries"><span><Check size={15} /> Public research and drafting run automatically</span><span><UserRoundCheck size={15} /> You approve the email handoff</span><span><Mail size={15} /> SolePilot never presses Send</span></div>}
 
               <fieldset className="run-mode-choice">
                 <legend>How should this run?</legend>
-                <button data-active={mode === "replay"} disabled={draft.missionType === "payment"} onClick={() => setMode("replay")} type="button">
-                  <FileJson size={17} /><span><strong>Preview safely</strong><small>Use sample tools. No setup required.</small></span>
-                </button>
                 <button data-active={mode === "live-ai"} onClick={() => setMode("live-ai")} type="button">
-                  <BrainCircuit size={17} /><span><strong>Use live tools</strong><small>{draft.missionType === "payment" ? "Prepare a wallet-signed transfer" : "Research online and create real outputs"}</small></span>
+                  <BrainCircuit size={17} /><span><strong>Use live tools</strong><small>{draft.missionType === "payment" ? "Prepare a wallet-signed transfer" : "Read public sources and create a real proposal"}</small></span>
+                </button>
+                <button data-active={mode === "replay"} disabled={draft.missionType === "payment"} onClick={() => setMode("replay")} type="button">
+                  <FileJson size={17} /><span><strong>Use sample data</strong><small>Preview the workflow without live research.</small></span>
                 </button>
               </fieldset>
             </div>

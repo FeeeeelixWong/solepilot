@@ -29,6 +29,7 @@ const missionDraft = {
   objective: "Research autonomous agent governance and prepare an owner-approved briefing",
   customer: "BUIDL_QUESTS reviewers",
   source: "Public web evidence",
+  contactEmail: "reviewer@example.com",
   deadline: "2026-08-12",
   budgetCapUsd: 120,
   missionType: "work",
@@ -46,6 +47,7 @@ const researchAction = mission.actions.find((action) => action.toolName === "web
 const reviewAction = mission.actions.find((action) => action.toolName === "outbox.send");
 assert.ok(researchAction, "plan must include governed online research");
 assert.ok(reviewAction, "plan must include an external delivery boundary");
+assert.equal(reviewAction.destination, missionDraft.contactEmail, "handoff must preserve the owner-entered recipient");
 
 const { payload: research, response: researchResponse } = await json(
   "/api/tools/research",
@@ -54,6 +56,7 @@ const { payload: research, response: researchResponse } = await json(
     customer: mission.customer,
     missionId: mission.id,
     objective: mission.objective,
+    source: mission.source,
   }),
 );
 assert.equal(researchResponse.status, 200, "research adapter must execute");

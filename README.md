@@ -7,8 +7,8 @@
 <p align="center"><strong>AI operations for one-person companies.</strong></p>
 
 <p align="center">
-  AI operations for solo founders. Research and drafting move automatically;
-  messages, spending, and commitments pause for the owner's decision.
+  Give SolePilot a customer and an outcome. It researches the opportunity,
+  drafts a proposal, and hands the approved email back to the owner.
 </p>
 
 <p align="center">
@@ -50,9 +50,11 @@ payments pause. Violations fail before connector invocation.
 five-minute, single-use capability bound to the full action, mission, policy
 result, and nonce. Reuse or mutation fails closed.
 
-**4. Real integrations preserve the trust boundary.** Online research uses
-current external evidence and server-attested results. Telegram uses a fixed
-server-side destination plus an owner code. Solana payment remains
+**4. Real integrations preserve the trust boundary.** Online research reads the
+owner-supplied public page and current external evidence, then returns
+server-attested results. The default delivery creates an owner-controlled email
+handoff without sending automatically; Telegram remains an optional fixed
+server-side proof connector. Solana payment remains
 non-custodial: the wallet extension signs the exact Devnet transfer after
 policy and owner review.
 
@@ -66,9 +68,9 @@ in-browser.
 | Surface | Competition build | Verification |
 | --- | --- | --- |
 | Planner | Live same-origin typed planner | `POST /api/plans` |
-| Research | Wikipedia + Hacker News evidence | provider URLs + request ID |
-| Delivery | Owner-approved Telegram connector | provider message ID + attestation |
-| Policy | Deterministic pre-tool gate | 24 focused tests |
+| Research | Owner URL + public-source evidence | provider URLs + request ID |
+| Delivery | Owner-approved email handoff; optional Telegram proof | local artifact or provider attestation |
+| Policy | Deterministic pre-tool gate | 25 focused tests |
 | Approval | Single-use action capability | replay and mutation negative tests |
 | Payment | OKX Wallet / Phantom, Solana Devnet | wallet signature + Explorer URL |
 | Audit | Hash-linked canonical receipts | in-browser verification + JSON export |
@@ -114,17 +116,17 @@ model, enforced invariants, adversarial test coverage, and remaining risks.
 
 ## Two-minute product path
 
-1. Open [the live product](https://solepilot.vercel.app) and select **Run guided task**.
-2. Select **Start task** and watch routine research and drafting finish automatically.
-3. Inspect the delegated research and drafting artifacts.
-4. Approve or reject the paused external send.
-5. Continue until the over-cap reservation is blocked before invocation.
-6. Open **Activity**, expand a record, and inspect its technical proof.
-7. Select **Check records**.
+1. Open [the live product](https://solepilot.vercel.app) and select **Create a real task**.
+2. Enter the desired outcome, customer, public website, and optional contact email.
+3. Keep **Use live tools** selected, create the task, then select **Start task**.
+4. Inspect the retrieved sources and customer-ready proposal.
+5. Approve the paused email handoff. SolePilot does not send the message.
+6. Copy or download the proposal, or open it in the owner's email client.
+7. Open **Activity** to inspect and verify the governed action records.
 
-The guided preview requires no account or API key. For a real online task,
-select **New task**, choose **Delegate business work**, and enable **Use live
-tools** in step three. For a wallet-dependent flow, choose **Prepare a
+The live customer-work path requires no account, provider credential, or
+third-party login. The guided preview remains available as a deterministic
+policy walkthrough. For a wallet-dependent flow, choose **Prepare a
 payment** and inspect the exact recipient, amount, limit, purpose, and
 conditions before approving the Devnet signature.
 
@@ -135,8 +137,10 @@ conditions before approving the Devnet signature.
 - Deterministic `ALLOW`, `REVIEW`, and `BLOCK` policy outcomes
 - Policy re-evaluation at the governed tool boundary
 - Five-minute, single-use, action-bound owner capabilities
-- Live public research with request IDs, evidence URLs, and HMAC attestations
-- Real fixed-destination Telegram delivery behind an owner connector code
+- Safe retrieval of an owner-supplied public page plus live public research
+- Customer-ready proposal artifacts with copy and download controls
+- Owner-approved email handoff that never sends automatically
+- Optional fixed-destination Telegram proof connector behind an owner code
 - Chain-neutral payment intents and an executable Solana Devnet adapter
 - Non-custodial OKX Wallet and Phantom signing
 - Hash-linked receipts with artifact digests and canonical payload inspection
@@ -185,8 +189,9 @@ capabilities are not persisted. SolePilot never receives a wallet private key.
 This competition build is explicit about what is real:
 
 - **Replay:** real governance and receipts, sandbox tool outputs.
-- **Online Agent:** real Vercel APIs, external research, attestations, and
-  owner-approved Telegram delivery.
+- **Online work:** real Vercel APIs, safe public-page retrieval, external
+  research, attestations, and an owner-controlled email handoff.
+- **Telegram proof:** optional owner-approved fixed-destination connector.
 - **Solana payment:** real non-custodial wallet path on Devnet only.
 - **Production plan:** tenant storage, passkey approvals, and mainnet adapters
   are documented replacements, not hidden claims.

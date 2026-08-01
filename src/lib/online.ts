@@ -46,6 +46,7 @@ export function runOnlineResearch(
     customer: mission.customer,
     missionId: mission.id,
     objective: mission.objective,
+    source: mission.source,
   });
 }
 

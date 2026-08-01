@@ -68,6 +68,7 @@ export interface Mission {
   title: string;
   customer: string;
   source: string;
+  contactEmail?: string;
   objective: string;
   deadline: string;
   budgetCapUsd: number;
@@ -84,6 +85,7 @@ export interface MissionDraft {
   objective: string;
   customer: string;
   source: string;
+  contactEmail?: string;
   deadline: string;
   budgetCapUsd: number;
   missionType: MissionType;
@@ -121,6 +123,10 @@ export interface ToolArtifact {
     source: string;
   }>;
   attestation?: string;
+  delivery?: {
+    recipient?: string;
+    subject: string;
+  };
   createdAt: string;
 }
 
