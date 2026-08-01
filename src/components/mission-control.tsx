@@ -652,13 +652,6 @@ export function MissionControl() {
             <span>{mission.executionMode === "online" ? `${runtimeHealth?.version ?? "checking"} / server tools` : mission.plannerModel}</span>
           </div>
         </div>
-        <div className="owner-card">
-          <div className="owner-avatar" aria-hidden="true">MH</div>
-          <div>
-            <p className="owner-name">Mingfeng</p>
-            <p className="owner-role">Owner online</p>
-          </div>
-        </div>
       </aside>
 
       <main className="workspace">
@@ -674,20 +667,21 @@ export function MissionControl() {
             <h1>{view === "mission"
               ? mission.title
               : view === "missions"
-                ? "Overview"
+                ? "Company overview"
                 : view === "proof"
                   ? "System proof"
                   : navItems.find((item) => item.id === view)?.label}</h1>
+            {view === "missions" ? (
+              <p className="page-summary">Delegate work to AI agents. SolePilot pauses spending, external messages, and commitments for your approval.</p>
+            ) : view === "mission" ? (
+              <p className="page-summary">
+                {mission.customer} · {mission.executionMode === "online" ? "Online agent" : "Safe replay"}
+              </p>
+            ) : null}
           </div>
           <div className="topbar-actions">
-            <span className="runtime-badge live" data-live={mission.executionMode === "online"}>
-              {mission.executionMode === "online" ? <Cloud size={13} /> : <FileJson size={13} />}
-              {mission.executionMode === "online"
-                ? runtimeHealth?.telegram ? "Online · ready" : "Online · limited"
-                : "Replay"}
-            </span>
-            {view !== "missions" ? (
-              <button className="button secondary icon-command" onClick={() => setComposerOpen(true)} title="New mission" type="button">
+            {view === "missions" || view === "mission" ? (
+              <button className={`button ${view === "missions" ? "primary" : "secondary"} icon-command`} onClick={() => setComposerOpen(true)} title="New mission" type="button">
                 <Plus aria-hidden="true" size={17} />
                 <span>New mission</span>
               </button>
@@ -725,12 +719,9 @@ export function MissionControl() {
         {view === "missions" ? (
           <OverviewView
             activeMissionId={mission.id}
-            onCreate={() => setComposerOpen(true)}
             onOpen={openMission}
-            onOpenActive={() => setView("mission")}
             onRunDemo={loadJudgeDemo}
             policies={policies}
-            runtimeHealth={runtimeHealth}
             runtimes={missionRuntimes}
           />
         ) : null}
@@ -798,21 +789,15 @@ export function MissionControl() {
 
 function OverviewView({
   activeMissionId,
-  onCreate,
   onOpen,
-  onOpenActive,
   onRunDemo,
   policies,
-  runtimeHealth,
   runtimes,
 }: {
   activeMissionId: string;
-  onCreate: () => void;
   onOpen: (missionId: string) => void;
-  onOpenActive: () => void;
   onRunDemo: () => void;
   policies: OwnerPolicy[];
-  runtimeHealth: RuntimeHealth | null;
   runtimes: PersistedRuntime[];
 }) {
   const totals = runtimes.reduce(
@@ -831,190 +816,97 @@ function OverviewView({
     { actions: 0, completed: 0, reviews: 0, receipts: 0 },
   );
 
-  const activeRuntime = runtimes.find(
-    (runtime) => runtime.mission.id === activeMissionId,
-  ) ?? runtimes[0];
   const approvalRuntime = runtimes.find((runtime) =>
     Object.values(runtime.statuses).includes("awaiting-owner"),
   );
   const approvalAction = approvalRuntime?.mission.actions.find(
     (action) => approvalRuntime.statuses[action.id] === "awaiting-owner",
   );
-  const activeValues = activeRuntime ? Object.values(activeRuntime.statuses) : [];
-  const activeCompleted = activeValues.filter(
-    (status) => status === "complete" || status === "blocked",
-  ).length;
-  const activeTotal = activeRuntime?.mission.actions.length ?? 0;
-  const activeProgress = activeTotal === 0
-    ? 0
-    : Math.round((activeCompleted / activeTotal) * 100);
-  const nextAction = activeRuntime?.mission.actions.find(
-    (action) => activeRuntime.statuses[action.id] === "awaiting-owner",
-  ) ?? activeRuntime?.mission.actions.find(
-    (action) => activeRuntime.statuses[action.id] === "pending",
-  );
-  const recentReceipts = runtimes
-    .flatMap((runtime) => runtime.receipts.map((receipt) => ({
-      ...receipt,
-      missionTitle: runtime.mission.title,
-    })))
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-    .slice(0, 4);
   const activePolicyCount = policies.filter((policy) => policy.enabled).length;
 
   return (
-    <section className="overview-view">
-      <section className="overview-intro">
-        <div className="overview-intro-copy">
-          <p className="eyebrow">AUTONOMOUS WORK, OWNER-CONTROLLED</p>
-          <h2>Run your company with agents. <span>Approve what matters.</span></h2>
-          <p>SolePilot plans and executes work, then pauses before an agent spends, sends, or commits on your behalf.</p>
-          <div className="overview-actions">
-            <button className="button primary" onClick={onCreate} type="button">
-              <Plus size={16} />Create mission
-            </button>
-            <button className="button secondary" onClick={onRunDemo} type="button">
-              <Play size={16} />Run guided demo
-            </button>
-          </div>
-        </div>
-        <div className="overview-snapshot" aria-label="Workspace status">
-          <div className="snapshot-status">
-            <span className="status-dot" />
-            <div>
-              <strong>{runtimeHealth?.planner ? "Agent runtime ready" : "Replay runtime ready"}</strong>
-              <span>{runtimeHealth?.planner ? "Live planning and governed tools" : "No setup needed to explore"}</span>
-            </div>
-          </div>
-          <dl>
-            <div><dt>Guardrails</dt><dd>{activePolicyCount} active</dd></div>
-            <div><dt>Approvals</dt><dd>{totals.reviews} waiting</dd></div>
-            <div><dt>Verified</dt><dd>{totals.receipts} outcomes</dd></div>
-          </dl>
-        </div>
-      </section>
-
-      <div className="overview-grid">
-        <div className="overview-primary">
-          <section className="attention-panel" data-waiting={Boolean(approvalAction)}>
-            <div className="attention-icon">
-              {approvalAction ? <UserRoundCheck size={20} /> : <CheckCircle2 size={20} />}
-            </div>
-            <div className="attention-copy">
-              <p className="eyebrow">NEEDS YOUR ATTENTION</p>
-              <h3>{approvalAction ? approvalAction.title : "Nothing is waiting on you"}</h3>
-              <p>{approvalAction
-                ? `${approvalRuntime?.mission.title} is paused before ${approvalAction.toolName}.`
-                : "Agents can keep working within the authority you already granted."}</p>
-            </div>
-            {approvalRuntime ? (
-              <button className="button review-button" onClick={() => onOpen(approvalRuntime.mission.id)} type="button">
-                Review <ArrowRight size={15} />
-              </button>
-            ) : null}
-          </section>
-
-          {activeRuntime ? (
-            <section className="current-mission">
-              <div className="section-title-row">
-                <div>
-                  <p className="eyebrow">CURRENT MISSION</p>
-                  <h3>{activeRuntime.mission.title}</h3>
-                </div>
-                <span className="mission-state" data-state={activeProgress === 100 ? "complete" : "ready"}>
-                  {activeProgress === 100 ? "Complete" : activeRuntime.mission.executionMode === "online" ? "Online" : "Replay"}
-                </span>
-              </div>
-              <p className="mission-objective">{activeRuntime.mission.objective}</p>
-              <div className="mission-progress-row">
-                <div className="progress-track" aria-label={`${activeProgress}% complete`}>
-                  <span style={{ width: `${activeProgress}%` }} />
-                </div>
-                <strong>{activeCompleted}/{activeTotal}</strong>
-              </div>
-              <div className="mission-next-row">
-                <div>
-                  <span>{nextAction ? "Next action" : "Mission status"}</span>
-                  <strong>{nextAction?.title ?? "All actions have an outcome"}</strong>
-                </div>
-                <button className="button secondary" onClick={onOpenActive} type="button">
-                  Open mission <ArrowRight size={15} />
-                </button>
-              </div>
-            </section>
-          ) : null}
-        </div>
-
-        <aside className="recent-outcomes">
-          <div className="section-title-row">
-            <div>
-              <p className="eyebrow">AUDIT TRAIL</p>
-              <h3>Recent outcomes</h3>
-            </div>
-            <span>{totals.receipts}</span>
-          </div>
-          {recentReceipts.length === 0 ? (
-            <div className="recent-empty">
-              <ReceiptText size={22} />
-              <strong>No outcomes yet</strong>
-              <p>Run a mission to create the first verifiable receipt.</p>
-            </div>
-          ) : (
-            <div className="recent-list">
-              {recentReceipts.map((receipt) => (
-                <div className="recent-row" key={receipt.id}>
-                  <span data-outcome={receipt.outcome} />
-                  <div>
-                    <strong>{receipt.resultLabel}</strong>
-                    <p>{receipt.missionTitle}</p>
-                  </div>
-                  <time>{new Date(receipt.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time>
-                </div>
-              ))}
-            </div>
-          )}
-        </aside>
+    <section className="overview-lite">
+      <div className="overview-meta-bar" aria-label="Workspace status">
+        <span><i className="status-dot" />Runtime ready</span>
+        <span><strong>{activePolicyCount}</strong> guardrails</span>
+        <span><strong>{totals.reviews}</strong> approvals</span>
+        <span><strong>{totals.receipts}</strong> verified outcomes</span>
+        <button onClick={onRunDemo} type="button"><Play size={14} />Load sample mission</button>
       </div>
 
-      <section className="mission-library">
-        <div className="mission-index-heading">
+      <section className="overview-section approval-queue">
+        <header className="overview-section-header">
           <div>
-            <h2>All missions</h2>
-            <p>Plans, approvals, and evidence stay together.</p>
+            <h2>Approval queue</h2>
+            <p>External actions stay paused until you decide.</p>
           </div>
-          <span>{runtimes.length} total</span>
+          <span>{totals.reviews}</span>
+        </header>
+        {approvalAction && approvalRuntime ? (
+          <button className="approval-queue-row" onClick={() => onOpen(approvalRuntime.mission.id)} type="button">
+            <span className="queue-icon"><UserRoundCheck size={18} /></span>
+            <span className="queue-copy">
+              <strong>{approvalAction.title}</strong>
+              <span>{approvalRuntime.mission.title}</span>
+            </span>
+            <span className="queue-context">
+              <small>Destination</small>
+              <strong>{approvalAction.destination ?? "External service"}</strong>
+            </span>
+            <span className="queue-review">Review <ArrowRight size={14} /></span>
+          </button>
+        ) : (
+          <div className="approval-empty">
+            <CheckCircle2 size={18} />
+            <span><strong>No approvals waiting</strong> Agents can continue within their existing guardrails.</span>
+          </div>
+        )}
+      </section>
+
+      <section className="overview-section mission-table-section">
+        <header className="overview-section-header">
+          <div>
+            <h2>Missions</h2>
+            <p>Every plan keeps its actions, decisions, and evidence together.</p>
+          </div>
+          <span>{runtimes.length}</span>
+        </header>
+        <div className="mission-table-labels" aria-hidden="true">
+          <span>Mission</span><span>Status</span><span>Progress</span><span>Next action</span><span />
         </div>
-        <div className="mission-index">
+        <div className="mission-table">
           {runtimes.map((runtime) => {
             const values = Object.values(runtime.statuses);
             const completed = values.filter(
               (status) => status === "complete" || status === "blocked",
             ).length;
-            const waiting = values.some(
-              (status) => status === "awaiting-owner",
-            );
+            const waiting = values.some((status) => status === "awaiting-owner");
             const complete = runtime.mission.actions.length > 0 && completed === runtime.mission.actions.length;
+            const next = runtime.mission.actions.find(
+              (action) => runtime.statuses[action.id] === "awaiting-owner",
+            ) ?? runtime.mission.actions.find(
+              (action) => runtime.statuses[action.id] === "pending",
+            );
+            const progress = runtime.mission.actions.length === 0
+              ? 0
+              : Math.round((completed / runtime.mission.actions.length) * 100);
+            const state = waiting ? "review" : complete ? "complete" : "ready";
             return (
               <button
-                className="mission-card"
+                className="mission-table-row"
                 data-active={runtime.mission.id === activeMissionId}
                 key={runtime.mission.id}
                 onClick={() => onOpen(runtime.mission.id)}
                 type="button"
               >
-                <span className="mission-card-icon">
-                  {runtime.mission.missionType === "payment" ? <WalletCards size={18} /> : <FileCheck2 size={18} />}
+                <span className="mission-table-name">
+                  <i>{runtime.mission.missionType === "payment" ? <WalletCards size={16} /> : <FileCheck2 size={16} />}</i>
+                  <span><strong>{runtime.mission.title}</strong><small>{runtime.mission.customer}</small></span>
                 </span>
-                <span className="mission-card-copy">
-                  <span className="mission-card-meta">
-                    <strong>{runtime.mission.title}</strong>
-                    <span data-state={waiting ? "review" : complete ? "complete" : "ready"}>
-                      {waiting ? "Approval needed" : complete ? "Complete" : "Ready"}
-                    </span>
-                  </span>
-                  <small>{completed}/{runtime.mission.actions.length} actions · {runtime.receipts.length} receipts</small>
-                </span>
-                <ChevronRight size={18} />
+                <span className="table-status" data-state={state}><i />{waiting ? "Needs approval" : complete ? "Complete" : "Ready"}</span>
+                <span className="table-progress"><span><i style={{ width: `${progress}%` }} /></span><strong>{completed}/{runtime.mission.actions.length}</strong></span>
+                <span className="table-next">{next?.title ?? "No actions remaining"}</span>
+                <ChevronRight size={17} />
               </button>
             );
           })}
@@ -1082,31 +974,32 @@ function MissionView({
         <div className="mission-summary">
           <div className="mission-summary-heading">
             <div>
-              <p className="eyebrow">MISSION OBJECTIVE</p>
+              <p className="mission-summary-label">Objective</p>
               <h2>{mission.objective}</h2>
             </div>
-            <span className="policy-badge">
+            <span className="guardrail-status">
               <ShieldCheck aria-hidden="true" size={15} />
-              {activePolicies} guardrails
+              {activePolicies} guardrails active
             </span>
           </div>
-          <div className="mission-progress-row">
-            <div className="progress-track" aria-label={`${missionProgress}% complete`}>
-              <span style={{ width: `${missionProgress}%` }} />
+          <div className="mission-summary-footer">
+            <div className="mission-progress-row">
+              <div className="progress-track" aria-label={`${missionProgress}% complete`}>
+                <span style={{ width: `${missionProgress}%` }} />
+              </div>
+              <strong>{completedCount}/{mission.actions.length}</strong>
             </div>
-            <strong>{completedCount}/{mission.actions.length}</strong>
-          </div>
-          <div className="mission-meta-line">
-            <span>{mission.customer}</span>
-            <span>{mission.payment ? `${mission.payment.maxAmount} ${mission.payment.asset} cap` : `$${mission.budgetCapUsd} budget cap`}</span>
-            <span>{mission.executionMode === "online" ? "Online agent" : "Safe replay"}</span>
+            <div className="mission-meta-line">
+              <span>{mission.payment ? `${mission.payment.maxAmount} ${mission.payment.asset} limit` : `$${mission.budgetCapUsd} budget limit`}</span>
+              <span>{mission.executionMode === "online" ? "Online agent" : "Safe replay"}</span>
+            </div>
           </div>
         </div>
 
         <div className="section-heading compact-heading">
           <div>
             <h2>Execution plan</h2>
-            <p>Select an action to inspect it. SolePilot checks every action before its tool can run.</p>
+            <p>Every action is checked before its tool can run.</p>
           </div>
         </div>
 

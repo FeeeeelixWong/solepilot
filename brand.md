@@ -19,7 +19,7 @@ a chatbot and should never resemble a generic AI assistant.
 
 | Role | Token | Value |
 | --- | --- | --- |
-| Operator black | `--sidebar` | `#0B1712` |
+| Navigation paper | `--sidebar` | `#F8FAF8` |
 | Control-room paper | `--bg` | `#EEF2EF` |
 | Primary surface | `--surface` | `#FBFDFB` |
 | Authority green | `--primary` | `#0D7850` |
