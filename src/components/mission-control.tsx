@@ -19,7 +19,8 @@ import {
   FileCheck2,
   FileJson,
   History,
-  Home,
+  Inbox,
+  ListChecks,
   LockKeyhole,
   KeyRound,
   Play,
@@ -63,7 +64,7 @@ import type {
   PersistedRuntime,
 } from "@/lib/types";
 
-type View = "missions" | "mission" | "policies" | "receipts" | "proof";
+type View = "home" | "missions" | "mission" | "decisions" | "policies" | "receipts" | "proof";
 type Verification = { valid: boolean; checked: number; error?: string } | null;
 
 const actionIcons: Record<AgentAction["kind"], typeof Search> = {
@@ -76,7 +77,8 @@ const actionIcons: Record<AgentAction["kind"], typeof Search> = {
 };
 
 const navItems: Array<{ id: View; label: string; icon: typeof Activity }> = [
-  { id: "missions", label: "Work", icon: Home },
+  { id: "missions", label: "Tasks", icon: ListChecks },
+  { id: "decisions", label: "Decisions", icon: Inbox },
   { id: "policies", label: "Rules", icon: ShieldCheck },
   { id: "receipts", label: "Activity", icon: History },
   { id: "proof", label: "System", icon: FileCheck2 },
@@ -133,7 +135,7 @@ function newEvent(
 }
 
 export function MissionControl() {
-  const [view, setView] = useState<View>("missions");
+  const [view, setView] = useState<View>("home");
   const [mission, setMission] = useState<Mission>(demoMission);
   const [statuses, setStatuses] = useState<Record<string, RuntimeStatus>>(
     statusesFor(demoMission),
@@ -146,6 +148,7 @@ export function MissionControl() {
   const [plannerMode, setPlannerMode] = useState<PlannerMode>("replay");
   const [isRunning, setIsRunning] = useState(false);
   const [composerOpen, setComposerOpen] = useState(false);
+  const [composerSeed, setComposerSeed] = useState("");
   const [verification, setVerification] = useState<Verification>(null);
   const [hydrated, setHydrated] = useState(false);
   const [announcement, setAnnouncement] = useState("Mission ready.");
@@ -154,6 +157,11 @@ export function MissionControl() {
   const [missionRuntimes, setMissionRuntimes] = useState<PersistedRuntime[]>([]);
   const receiptRef = useRef<RuntimeReceipt[]>([]);
   const artifactRef = useRef<ToolArtifact[]>([]);
+
+  function openComposer(seed = "") {
+    setComposerSeed(seed);
+    setComposerOpen(true);
+  }
 
   function restoreRuntime(runtime: PersistedRuntime) {
     const savedPolicies = new Map(
@@ -606,6 +614,7 @@ export function MissionControl() {
     setVerification(null);
     setOwnerCode("");
     setComposerOpen(false);
+    setComposerSeed("");
     setView("mission");
     setAnnouncement("A new governed agent plan is ready.");
   }
@@ -613,7 +622,7 @@ export function MissionControl() {
   return (
     <div className="app-shell">
       <header className="app-header">
-        <button className="brand-lockup" onClick={() => setView("missions")} type="button">
+        <button className="brand-lockup" onClick={() => setView("home")} type="button">
           <span className="brand-mark" aria-hidden="true">
             <img alt="" height="24" src="/solepilot-mark.svg" width="24" />
           </span>
@@ -629,7 +638,7 @@ export function MissionControl() {
             return (
               <button
                 className="nav-button"
-                data-active={view === item.id}
+                data-active={view === item.id || (item.id === "missions" && view === "mission")}
                 data-secondary={item.id === "proof"}
                 key={item.id}
                 onClick={() => setView(item.id)}
@@ -639,6 +648,8 @@ export function MissionControl() {
                 <span>{item.label}</span>
                 {item.id === "receipts" && receipts.length > 0 ? (
                   <span className="nav-count">{receipts.length}</span>
+                ) : item.id === "decisions" && waitingAction ? (
+                  <span className="nav-count">1</span>
                 ) : item.id === "missions" && missionRuntimes.length > 0 ? (
                   <span className="nav-count">{missionRuntimes.length}</span>
                 ) : null}
@@ -652,7 +663,7 @@ export function MissionControl() {
             <span className="status-dot" />
             Protected
           </span>
-          <button className="button primary" onClick={() => setComposerOpen(true)} type="button">
+          <button className="button primary" onClick={() => openComposer()} type="button">
             <Plus aria-hidden="true" size={17} />
             New task
           </button>
@@ -660,17 +671,21 @@ export function MissionControl() {
       </header>
 
       <main className="workspace">
-        {view !== "missions" ? (
+        {view !== "home" ? (
           <header className="page-header">
             <div className="page-heading">
               {view === "mission" ? (
                 <button className="back-link" onClick={() => setView("missions")} type="button">
-                  <ArrowLeft aria-hidden="true" size={15} /> Back to work
+                  <ArrowLeft aria-hidden="true" size={15} /> Back to tasks
                 </button>
               ) : null}
               <p className="eyebrow">
                 {view === "mission"
                   ? mission.executionMode === "online" ? "LIVE TASK" : "GUIDED EXAMPLE"
+                  : view === "missions"
+                    ? "AI WORKSPACE"
+                    : view === "decisions"
+                      ? "OWNER INBOX"
                   : view === "policies"
                     ? "OWNER RULES"
                     : view === "receipts"
@@ -679,6 +694,10 @@ export function MissionControl() {
               </p>
               <h1>{view === "mission"
                 ? mission.title
+                : view === "missions"
+                  ? "Tasks your AI team is handling"
+                  : view === "decisions"
+                    ? "Decisions only you can make"
                 : view === "policies"
                   ? "Rules your AI team cannot change"
                   : view === "receipts"
@@ -690,6 +709,10 @@ export function MissionControl() {
                     ? `For ${mission.customer} · Due ${mission.deadline}`
                     : `For ${mission.customer} · Safe guided preview`}
                 </p>
+              ) : view === "missions" ? (
+                <p className="page-summary">See what is ready, what is moving, and what needs your attention.</p>
+              ) : view === "decisions" ? (
+                <p className="page-summary">Messages, spending, payments, and commitments pause here before they happen.</p>
               ) : view === "policies" ? (
                 <p className="page-summary">Routine work can run automatically. Money, messages, and commitments still need you.</p>
               ) : view === "receipts" ? (
@@ -728,15 +751,26 @@ export function MissionControl() {
 
         <p className="sr-only" aria-live="polite">{announcement}</p>
 
-        {view === "missions" ? (
-          <OverviewView
-            activeMissionId={mission.id}
-            onCreate={() => setComposerOpen(true)}
-            onOpen={openMission}
+        {view === "home" ? (
+          <LandingView
+            onCreate={openComposer}
+            onOpenTasks={() => setView("missions")}
             onRunDemo={loadJudgeDemo}
-            policies={policies}
+            runtimeHealth={runtimeHealth}
+          />
+        ) : null}
+
+        {view === "missions" ? (
+          <TasksView
+            activeMissionId={mission.id}
+            onCreate={() => openComposer()}
+            onOpen={openMission}
             runtimes={missionRuntimes}
           />
+        ) : null}
+
+        {view === "decisions" ? (
+          <DecisionsView onOpen={openMission} onRunDemo={loadJudgeDemo} runtimes={missionRuntimes} />
         ) : null}
 
         {view === "mission" && selectedAction ? (
@@ -783,7 +817,7 @@ export function MissionControl() {
       {composerOpen ? (
         <MissionComposer
           initialDraft={{
-            objective: mission.objective || demoDraft.objective,
+            objective: composerSeed || mission.objective || demoDraft.objective,
             customer: mission.customer || demoDraft.customer,
             source: mission.source || demoDraft.source,
             deadline: mission.deadline || demoDraft.deadline,
@@ -792,7 +826,7 @@ export function MissionControl() {
             payment: mission.payment,
           }}
           initialMode={plannerMode}
-          onClose={() => setComposerOpen(false)}
+          onClose={() => { setComposerOpen(false); setComposerSeed(""); }}
           onCreate={createMission}
         />
       ) : null}
@@ -800,179 +834,215 @@ export function MissionControl() {
   );
 }
 
-function OverviewView({
-  activeMissionId,
-  onCreate,
-  onOpen,
-  onRunDemo,
-  policies,
-  runtimes,
-}: {
-  activeMissionId: string;
-  onCreate: () => void;
-  onOpen: (missionId: string) => void;
-  onRunDemo: () => void;
-  policies: OwnerPolicy[];
-  runtimes: PersistedRuntime[];
-}) {
-  const totals = runtimes.reduce(
-    (current, runtime) => {
-      const values = Object.values(runtime.statuses);
-      current.actions += runtime.mission.actions.length;
-      current.completed += values.filter(
-        (status) => status === "complete" || status === "blocked",
-      ).length;
-      current.reviews += values.filter(
-        (status) => status === "awaiting-owner",
-      ).length;
-      current.receipts += runtime.receipts.length;
-      return current;
-    },
-    { actions: 0, completed: 0, reviews: 0, receipts: 0 },
-  );
+function summarizeRuntime(runtime: PersistedRuntime) {
+  const values = Object.values(runtime.statuses);
+  const completed = values.filter((status) => status === "complete" || status === "blocked").length;
+  const waiting = values.some((status) => status === "awaiting-owner");
+  const complete = runtime.mission.actions.length > 0 && completed === runtime.mission.actions.length;
+  const next = runtime.mission.actions.find((action) => runtime.statuses[action.id] === "awaiting-owner")
+    ?? runtime.mission.actions.find((action) => runtime.statuses[action.id] === "pending");
+  return {
+    complete,
+    completed,
+    next,
+    progress: runtime.mission.actions.length === 0 ? 0 : Math.round((completed / runtime.mission.actions.length) * 100),
+    state: waiting ? "review" : complete ? "complete" : completed > 0 ? "active" : "ready",
+    waiting,
+  };
+}
 
-  const approvalRuntime = runtimes.find((runtime) =>
-    Object.values(runtime.statuses).includes("awaiting-owner"),
-  );
-  const approvalAction = approvalRuntime?.mission.actions.find(
-    (action) => approvalRuntime.statuses[action.id] === "awaiting-owner",
-  );
-  const activePolicyCount = policies.filter((policy) => policy.enabled).length;
+function LandingView({ onCreate, onOpenTasks, onRunDemo, runtimeHealth }: {
+  onCreate: (seed?: string) => void;
+  onOpenTasks: () => void;
+  onRunDemo: () => void;
+  runtimeHealth: RuntimeHealth | null;
+}) {
+  const [prompt, setPrompt] = useState("");
+  const [preview, setPreview] = useState<"plan" | "approval" | "evidence">("approval");
+
+  function submitPrompt(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    onCreate(prompt.trim());
+  }
 
   return (
-    <section className="home-view">
-      <section className="home-intro">
-        <div className="home-intro-copy">
-          <p className="eyebrow">AI OPERATIONS FOR SOLO FOUNDERS</p>
-          <h1>Give your AI team work.<br /><span>Keep the final say.</span></h1>
-          <p>
-            SolePilot researches and drafts on its own, then pauses before it sends
-            a message, spends money, or commits your company to anything.
-          </p>
-          <div className="home-actions">
-            <button className="button primary" onClick={onCreate} type="button">
-              <Plus aria-hidden="true" size={17} /> Give your team a task
-            </button>
-            <button className="button text-button" onClick={onRunDemo} type="button">
-              <Play aria-hidden="true" size={16} /> See a two-minute example
-            </button>
-          </div>
-          <div className="home-trust-line">
-            <ShieldCheck aria-hidden="true" size={16} />
-            <span>Your AI cannot approve its own external actions.</span>
-          </div>
-        </div>
+    <section className="landing-view">
+      <div className="landing-status-strip">
+        <span><i className="status-dot" /> Live product</span>
+        <span>Guided example requires no setup</span>
+        <button onClick={onOpenTasks} type="button">Open workspace <ArrowRight size={13} /></button>
+      </div>
 
-        <div className="control-loop" aria-label="How SolePilot works">
-          <p className="control-loop-label">How work moves</p>
-          <ol>
-            <li>
-              <span>1</span>
-              <div><strong>You set the goal</strong><small>Add a deadline and spending limit.</small></div>
-            </li>
-            <li>
-              <span>2</span>
-              <div><strong>AI handles routine work</strong><small>Research and drafts run automatically.</small></div>
-            </li>
-            <li className="control-loop-owner">
-              <span>3</span>
-              <div><strong>You approve what matters</strong><small>Messages, payments, and commitments pause.</small></div>
-            </li>
-          </ol>
-          <div className="control-loop-foot">
-            <LockKeyhole aria-hidden="true" size={15} /> Nothing consequential happens silently
-          </div>
+      <section className="landing-hero">
+        <div className="landing-brand-signal">
+          <span className="landing-mark"><img alt="" height="28" src="/solepilot-mark.svg" width="28" /></span>
+          <strong>SOLEPILOT</strong>
+        </div>
+        <p className="eyebrow">SOLEPILOT CONTROL PLANE</p>
+        <h1>AI operations for one-person companies.</h1>
+        <p className="landing-subtitle">
+          Delegate the work. Keep authority. Your AI team researches, drafts, and prepares actions. SolePilot pauses before
+          messages, spending, payments, or commitments leave your company.
+        </p>
+        <form className="command-entry" onSubmit={submitPrompt}>
+          <Bot aria-hidden="true" size={19} />
+          <label className="sr-only" htmlFor="landing-task">What should your AI team handle?</label>
+          <input
+            id="landing-task"
+            onChange={(event) => setPrompt(event.target.value)}
+            placeholder="What should your AI team handle?"
+            value={prompt}
+          />
+          <button aria-label="Set up this task" type="submit"><ArrowRight size={18} /></button>
+        </form>
+        <div className="landing-actions">
+          <button className="button primary" onClick={onRunDemo} type="button"><Play size={16} /> Run guided task</button>
+          <button className="button secondary" onClick={() => onCreate()} type="button"><Plus size={16} /> Build your own</button>
+        </div>
+        <div className="landing-trust">
+          <span><ShieldCheck size={14} /> AI cannot approve itself</span>
+          <span><LockKeyhole size={14} /> Wallet stays with the owner</span>
+          <span><ReceiptText size={14} /> Every outcome is recorded</span>
         </div>
       </section>
 
-      <div className="home-status" aria-label="Workspace status">
-        <span><i className="status-dot" /> AI team ready</span>
-        <span><strong>{activePolicyCount}</strong> owner rules active</span>
-        <span><strong>{totals.completed}</strong> actions finished</span>
-        <span><strong>{totals.receipts}</strong> outcomes recorded</span>
-      </div>
-
-      <div className="home-workspace">
-        <section className="decision-inbox">
-          <header className="section-title-row">
-            <div>
-              <p className="section-kicker">YOUR DECISIONS</p>
-              <h2>{totals.reviews ? `${totals.reviews} action${totals.reviews === 1 ? "" : "s"} waiting` : "Nothing needs you right now"}</h2>
+      <section className="product-preview" aria-label="Interactive SolePilot preview">
+        <header className="preview-window-header">
+          <div><span className="preview-logo"><img alt="" height="18" src="/solepilot-mark.svg" width="18" /></span><strong>SolePilot</strong><small>GUIDED TASK</small></div>
+          <div><span className="preview-live"><i className="status-dot" /> Protected</span><button onClick={onRunDemo} type="button">Open task <ArrowRight size={13} /></button></div>
+        </header>
+        <div className="preview-tabs" role="tablist" aria-label="Product preview">
+          <button aria-selected={preview === "plan"} onClick={() => setPreview("plan")} role="tab" type="button">Task plan</button>
+          <button aria-selected={preview === "approval"} onClick={() => setPreview("approval")} role="tab" type="button">Owner decision</button>
+          <button aria-selected={preview === "evidence"} onClick={() => setPreview("evidence")} role="tab" type="button">Activity proof</button>
+        </div>
+        <div className="preview-body">
+          <div className="preview-context">
+            <p className="section-kicker">QUALIFY A NEW CUSTOMER</p>
+            <h2>Research the opportunity and prepare a proposal</h2>
+            <span>2 of 5 steps finished</span>
+          </div>
+          {preview === "plan" ? (
+            <div className="preview-plan" role="tabpanel">
+              <div data-state="done"><span><Check size={14} /></span><p><strong>Research the opportunity</strong><small>Market and customer evidence collected</small></p><b>Done</b></div>
+              <div data-state="done"><span><Check size={14} /></span><p><strong>Draft the delivery scope</strong><small>Proposal prepared for review</small></p><b>Done</b></div>
+              <div data-state="review"><span>3</span><p><strong>Send the proposal</strong><small>External message requires the owner</small></p><b>Needs you</b></div>
+              <div data-state="blocked"><span>4</span><p><strong>Upgrade the data plan</strong><small>Outside the approved spending limit</small></p><b>Will stop</b></div>
             </div>
-            <span className="section-count">{totals.reviews}</span>
-          </header>
-        {approvalAction && approvalRuntime ? (
-          <button className="decision-row" onClick={() => onOpen(approvalRuntime.mission.id)} type="button">
-            <span className="queue-icon"><UserRoundCheck size={18} /></span>
-            <span className="queue-copy">
-              <strong>{approvalAction.title}</strong>
-              <span>{approvalRuntime.mission.title}</span>
-            </span>
-            <span className="queue-review">Decide <ArrowRight size={14} /></span>
-          </button>
-        ) : (
-          <div className="decision-empty">
-            <span><CheckCircle2 size={20} /></span>
-            <div><strong>Your AI team can keep working</strong><p>SolePilot will bring you back when an action needs permission.</p></div>
-          </div>
-        )}
-        </section>
+          ) : preview === "approval" ? (
+            <div className="preview-approval" role="tabpanel">
+              <div className="preview-question">
+                <span><UserRoundCheck size={21} /></span>
+                <div><p className="section-kicker">YOUR DECISION</p><h3>Should the AI team send the proposal?</h3><p>Nothing has been sent or committed yet.</p></div>
+              </div>
+              <dl><div><dt>Destination</dt><dd>founder@northstar.example</dd></div><div><dt>Reason</dt><dd>External reputation and commercial terms</dd></div></dl>
+              <div className="preview-actions"><button onClick={onRunDemo} type="button"><Check size={15} /> Approve action</button><button onClick={onRunDemo} type="button"><X size={15} /> Reject</button></div>
+            </div>
+          ) : (
+            <div className="preview-evidence" role="tabpanel">
+              <div><span><CheckCircle2 size={17} /></span><p><strong>Research completed</strong><small>Delegated by your rules · 10:42</small></p><code>ALLOW</code></div>
+              <div><span><UserRoundCheck size={17} /></span><p><strong>Proposal approved by owner</strong><small>Single-use approval · 10:44</small></p><code>APPROVED</code></div>
+              <div><span><ShieldCheck size={17} /></span><p><strong>Over-limit purchase stopped</strong><small>No connected tool was called · 10:45</small></p><code>BLOCKED</code></div>
+              <footer><ReceiptText size={14} /> Hash-linked records verify successfully</footer>
+            </div>
+          )}
+        </div>
+      </section>
 
-        <section className="task-library">
-          <header className="section-title-row">
-          <div>
-              <p className="section-kicker">YOUR WORK</p>
-              <h2>Tasks</h2>
-          </div>
-            <button className="section-action" onClick={onCreate} type="button"><Plus size={15} /> New task</button>
-          </header>
-          <div className="task-list">
-          {runtimes.map((runtime) => {
-            const values = Object.values(runtime.statuses);
-            const completed = values.filter(
-              (status) => status === "complete" || status === "blocked",
-            ).length;
-            const waiting = values.some((status) => status === "awaiting-owner");
-            const complete = runtime.mission.actions.length > 0 && completed === runtime.mission.actions.length;
-            const next = runtime.mission.actions.find(
-              (action) => runtime.statuses[action.id] === "awaiting-owner",
-            ) ?? runtime.mission.actions.find(
-              (action) => runtime.statuses[action.id] === "pending",
-            );
-            const progress = runtime.mission.actions.length === 0
-              ? 0
-              : Math.round((completed / runtime.mission.actions.length) * 100);
-            const state = waiting ? "review" : complete ? "complete" : "ready";
-            return (
-              <button
-                className="task-row"
-                data-active={runtime.mission.id === activeMissionId}
-                key={runtime.mission.id}
-                onClick={() => onOpen(runtime.mission.id)}
-                type="button"
-              >
-                <span className="task-icon">
-                  {runtime.mission.missionType === "payment" ? <WalletCards size={18} /> : <BriefcaseBusiness size={18} />}
-                </span>
-                <span className="task-copy">
-                  <strong>{runtime.mission.title}</strong>
-                  <small>{runtime.mission.customer}</small>
-                  <span className="task-next">Next: {next?.title ?? "All actions finished"}</span>
-                </span>
-                <span className="task-state" data-state={state}>
-                  {waiting ? "Needs you" : complete ? "Complete" : completed > 0 ? "In progress" : "Ready"}
-                </span>
-                <span className="task-progress">
-                  <span><i style={{ width: `${progress}%` }} /></span>
-                  <strong>{completed} of {runtime.mission.actions.length}</strong>
-                </span>
-                <ChevronRight aria-hidden="true" size={18} />
-              </button>
-            );
-          })}
-          </div>
-        </section>
+      <section className="landing-pillars">
+        <article><span>01</span><h3>Routine work keeps moving</h3><p>Research and drafting run without turning every step into an approval queue.</p></article>
+        <article><span>02</span><h3>Consequences wait for you</h3><p>External messages, money, and commitments pause before a real tool runs.</p></article>
+        <article><span>03</span><h3>Claims become evidence</h3><p>Every completed, approved, rejected, or stopped action leaves a checkable record.</p></article>
+      </section>
+
+      <footer className="landing-footer">
+        <div><strong>SolePilot</strong><span>Owner-controlled AI operations</span></div>
+        <nav aria-label="Product resources"><a href="https://github.com/FeeeeelixWong/solepilot" rel="noreferrer" target="_blank">Source <ExternalLink size={11} /></a><a href="https://github.com/FeeeeelixWong/solepilot/blob/main/ARCHITECTURE.md" rel="noreferrer" target="_blank">Architecture <ExternalLink size={11} /></a></nav>
+        <span>{runtimeHealth?.online ? "All live services available" : "Guided mode available"}</span>
+      </footer>
+    </section>
+  );
+}
+
+function TasksView({ activeMissionId, onCreate, onOpen, runtimes }: {
+  activeMissionId: string;
+  onCreate: () => void;
+  onOpen: (missionId: string) => void;
+  runtimes: PersistedRuntime[];
+}) {
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<"all" | "attention" | "active" | "complete">("all");
+  const summaries = runtimes.map((runtime) => ({ runtime, summary: summarizeRuntime(runtime) }));
+  const filtered = summaries.filter(({ runtime, summary }) => {
+    const matchesQuery = `${runtime.mission.title} ${runtime.mission.customer}`.toLowerCase().includes(query.toLowerCase());
+    const matchesFilter = filter === "all" || (filter === "attention" && summary.waiting) || (filter === "complete" && summary.complete) || (filter === "active" && summary.state === "active");
+    return matchesQuery && matchesFilter;
+  });
+  const totalSteps = summaries.reduce((total, item) => total + item.runtime.mission.actions.length, 0);
+  const finishedSteps = summaries.reduce((total, item) => total + item.summary.completed, 0);
+  const waitingCount = summaries.filter((item) => item.summary.waiting).length;
+
+  return (
+    <section className="tasks-view">
+      <div className="workspace-metrics" aria-label="Task metrics">
+        <span><strong>{runtimes.length}</strong> total tasks</span>
+        <span><strong>{summaries.filter((item) => !item.summary.complete).length}</strong> open</span>
+        <span data-tone={waitingCount ? "attention" : "neutral"}><strong>{waitingCount}</strong> need you</span>
+        <span><strong>{finishedSteps}/{totalSteps}</strong> steps resolved</span>
       </div>
+      <div className="workspace-toolbar">
+        <label><Search size={16} /><span className="sr-only">Search tasks</span><input onChange={(event) => setQuery(event.target.value)} placeholder="Search tasks or customers" value={query} /></label>
+        <div className="workspace-filters" aria-label="Filter tasks">
+          {(["all", "attention", "active", "complete"] as const).map((value) => <button aria-pressed={filter === value} key={value} onClick={() => setFilter(value)} type="button">{value === "attention" ? "Needs you" : value[0].toUpperCase() + value.slice(1)}</button>)}
+        </div>
+        <button className="button primary" onClick={onCreate} type="button"><Plus size={16} /> New task</button>
+      </div>
+      <section className="task-library workspace-list">
+        <header className="section-title-row"><div><p className="section-kicker">YOUR WORK</p><h2>{filtered.length} task{filtered.length === 1 ? "" : "s"}</h2></div></header>
+        <div className="task-list">
+          {filtered.map(({ runtime, summary }) => (
+            <button className="task-row" data-active={runtime.mission.id === activeMissionId} key={runtime.mission.id} onClick={() => onOpen(runtime.mission.id)} type="button">
+              <span className="task-icon">{runtime.mission.missionType === "payment" ? <WalletCards size={18} /> : <BriefcaseBusiness size={18} />}</span>
+              <span className="task-copy"><strong>{runtime.mission.title}</strong><small>{runtime.mission.customer}</small><span className="task-next">Next: {summary.next?.title ?? "All actions finished"}</span></span>
+              <span className="task-state" data-state={summary.state}>{summary.waiting ? "Needs you" : summary.complete ? "Complete" : summary.completed > 0 ? "In progress" : "Ready"}</span>
+              <span className="task-progress"><span><i style={{ width: `${summary.progress}%` }} /></span><strong>{summary.completed} of {runtime.mission.actions.length}</strong></span>
+              <ChevronRight aria-hidden="true" size={18} />
+            </button>
+          ))}
+          {filtered.length === 0 ? <div className="workspace-empty"><Search size={21} /><strong>No tasks match this view</strong><p>Clear the search or choose another filter.</p></div> : null}
+        </div>
+      </section>
+    </section>
+  );
+}
+
+function DecisionsView({ onOpen, onRunDemo, runtimes }: {
+  onOpen: (missionId: string) => void;
+  onRunDemo: () => void;
+  runtimes: PersistedRuntime[];
+}) {
+  const waiting = runtimes.flatMap((runtime) => runtime.mission.actions
+    .filter((action) => runtime.statuses[action.id] === "awaiting-owner")
+    .map((action) => ({ action, runtime })));
+
+  return (
+    <section className="decisions-view">
+      <section className="decision-list-panel">
+        <header><div><p className="section-kicker">WAITING FOR YOU</p><h2>{waiting.length ? `${waiting.length} pending decision${waiting.length === 1 ? "" : "s"}` : "Your inbox is clear"}</h2></div><span>{waiting.length}</span></header>
+        {waiting.map(({ action, runtime }) => (
+          <button className="decision-list-row" key={action.id} onClick={() => onOpen(runtime.mission.id)} type="button">
+            <span><UserRoundCheck size={19} /></span><div><strong>{action.title}</strong><small>{runtime.mission.title}</small><p>{action.destination ? `Destination: ${action.destination}` : "An external consequence requires your approval."}</p></div><b>Review <ArrowRight size={14} /></b>
+          </button>
+        ))}
+        {waiting.length === 0 ? (
+          <div className="decision-page-empty"><span><CheckCircle2 size={24} /></span><h3>Nothing is waiting on you</h3><p>Your AI team can continue routine work. SolePilot will bring you here before anything consequential happens.</p><button className="button secondary" onClick={onRunDemo} type="button"><Play size={15} /> See an approval example</button></div>
+        ) : null}
+      </section>
+      <aside className="decision-boundary">
+        <p className="section-kicker">WHAT PAUSES HERE</p><h2>Authority stays outside the AI</h2>
+        <ol><li><span><Send size={16} /></span><div><strong>External messages</strong><p>Nothing reaches a customer or community silently.</p></div></li><li><span><WalletCards size={16} /></span><div><strong>Money and payments</strong><p>Recipient, amount, and purpose remain visible.</p></div></li><li><span><BriefcaseBusiness size={16} /></span><div><strong>Business commitments</strong><p>Commercial terms still require the owner.</p></div></li></ol>
+        <footer><KeyRound size={15} /> Each approval is short-lived and bound to one exact action.</footer>
+      </aside>
     </section>
   );
 }

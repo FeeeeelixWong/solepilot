@@ -1,6 +1,6 @@
 import { ImageResponse } from "next/og";
 
-export const alt = "SolePilot governed autonomy for one-person companies";
+export const alt = "SolePilot AI operations for one-person companies";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -51,7 +51,7 @@ export default function OpenGraphImage() {
               fontWeight: 700,
             }}
           >
-            VERIFIABLE AUTHORITY FOR AI AGENTS
+            DELEGATE THE WORK. KEEP AUTHORITY.
           </span>
           <div
             style={{
@@ -63,7 +63,7 @@ export default function OpenGraphImage() {
               lineHeight: 1.04,
             }}
           >
-            Let agents operate. Never let them grant themselves authority.
+            AI operations for one-person companies.
           </div>
         </div>
 

@@ -4,7 +4,7 @@
 
 <h1 align="center">SolePilot</h1>
 
-<p align="center"><strong>Give your AI team work. Keep the final say.</strong></p>
+<p align="center"><strong>AI operations for one-person companies.</strong></p>
 
 <p align="center">
   AI operations for solo founders. Research and drafting move automatically;
@@ -114,7 +114,7 @@ model, enforced invariants, adversarial test coverage, and remaining risks.
 
 ## Two-minute product path
 
-1. Open [the live product](https://solepilot.vercel.app) and select **See a two-minute example**.
+1. Open [the live product](https://solepilot.vercel.app) and select **Run guided task**.
 2. Select **Start task** and watch routine research and drafting finish automatically.
 3. Inspect the delegated research and drafting artifacts.
 4. Approve or reject the paused external send.
