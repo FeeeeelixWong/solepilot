@@ -19,52 +19,52 @@ import type { RuntimeHealth } from "@/lib/online";
 
 const architecture = [
   {
-    label: "Owner mandate",
-    detail: "Objective, budget, deadline",
-    trust: "trusted input",
+    label: "You set the goal",
+    detail: "Outcome, limit, deadline",
+    trust: "your instruction",
   },
   {
-    label: "Agent proposal",
-    detail: "Typed tool calls only",
-    trust: "untrusted",
+    label: "AI proposes work",
+    detail: "A clear action plan",
+    trust: "not yet authorized",
   },
   {
-    label: "Policy gate",
-    detail: "Allow, review, or block",
-    trust: "deterministic",
+    label: "Rules check it",
+    detail: "Continue, ask, or stop",
+    trust: "predictable",
   },
   {
-    label: "Tool boundary",
-    detail: "Capability checked again",
-    trust: "enforced",
+    label: "You approve impact",
+    detail: "Messages, spend, commitments",
+    trust: "owner controlled",
   },
   {
-    label: "Receipt proof",
-    detail: "Hash-linked outcome",
-    trust: "verifiable",
+    label: "Outcome is recorded",
+    detail: "A checkable activity history",
+    trust: "auditable",
   },
 ];
 
 const guarantees = [
   {
     icon: LockKeyhole,
-    title: "Models propose. They never authorize.",
-    copy: "Every generated action is normalized and evaluated before any connector can run.",
+    title: "AI cannot approve itself.",
+    copy: "Every proposed action is checked against your rules before a connected tool can run.",
   },
   {
     icon: KeyRound,
-    title: "Approval is action-bound.",
-    copy: "A five-minute, single-use capability commits to the mission, action, and policy result.",
+    title: "An approval works only once.",
+    copy: "Your approval applies to one exact action for a short time. It cannot be reused elsewhere.",
   },
   {
     icon: WalletCards,
-    title: "The owner remains the signer.",
-    copy: "Payment intents pass policy first; the wallet extension signs the exact Solana transfer.",
+    title: "Your wallet stays with you.",
+    copy: "SolePilot checks a payment first; your wallet signs the exact Solana transfer.",
   },
   {
     icon: ReceiptText,
-    title: "Every outcome leaves evidence.",
-    copy: "Policy decisions, tool artifacts, capabilities, and previous hashes are sealed together.",
+    title: "Every outcome can be checked.",
+    copy: "Completed, approved, rejected, and stopped actions all leave a tamper-evident record.",
   },
 ];
 
@@ -105,17 +105,16 @@ export function ProofView({
     <section className="proof-view">
       <header className="proof-hero">
         <div className="proof-hero-copy">
-          <p className="eyebrow">SOLEPILOT / VERIFIABLE AUTHORITY LAYER</p>
-          <h2>Let agents operate.<br />Never let them grant themselves authority.</h2>
+          <p className="eyebrow">HOW SOLEPILOT KEEPS YOU IN CONTROL</p>
+          <h2>Your AI team can do the work.<br />Only you can authorize the consequences.</h2>
           <p>
-            SolePilot turns model output into governed business execution for one-person
-            companies. Routine work proceeds, consequential actions pause, violations stop
-            before invocation, and every terminal outcome becomes inspectable evidence.
+            Routine work moves automatically. Messages, spending, and commitments pause for
+            your decision. Anything outside your rules stops before it reaches a real tool.
           </p>
           <div className="proof-hero-actions">
             <button className="button primary" onClick={onStartDemo} type="button">
               <Play aria-hidden="true" size={16} />
-              Start 90-second proof
+              Try the complete example
             </button>
             <a className="button secondary" href={repository} rel="noreferrer" target="_blank">
               <Github aria-hidden="true" size={16} />
@@ -125,28 +124,28 @@ export function ProofView({
           </div>
         </div>
 
-        <div className="proof-runtime" aria-label="Live runtime status">
+        <div className="proof-runtime" aria-label="System status">
           <div className="proof-runtime-heading">
-            <span><Radio aria-hidden="true" size={15} /> Live system proof</span>
+            <span><Radio aria-hidden="true" size={15} /> System status</span>
             <code>{runtimeHealth?.version ?? "checking"}</code>
           </div>
-          <StatusSignal label="Same-origin planner API" ready={runtimeHealth?.planner} resolved={runtimeHealth !== null} />
-          <StatusSignal label="External research adapter" ready={runtimeHealth?.research} resolved={runtimeHealth !== null} />
-          <StatusSignal label="Owner Telegram connector" ready={runtimeHealth?.telegram} resolved={runtimeHealth !== null} />
-          <StatusSignal label="HMAC result attestation" ready={runtimeHealth?.attestation} resolved={runtimeHealth !== null} />
+          <StatusSignal label="AI task planning" ready={runtimeHealth?.planner} resolved={runtimeHealth !== null} />
+          <StatusSignal label="Online research" ready={runtimeHealth?.research} resolved={runtimeHealth !== null} />
+          <StatusSignal label="Owner notifications" ready={runtimeHealth?.telegram} resolved={runtimeHealth !== null} />
+          <StatusSignal label="Verified activity records" ready={runtimeHealth?.attestation} resolved={runtimeHealth !== null} />
           <div className="proof-runtime-foot">
             <Cloud aria-hidden="true" size={14} />
-            <span>Credentials remain server-side. The model never sees connector secrets.</span>
+            <span>Connection credentials stay on the server. The AI never sees them.</span>
           </div>
         </div>
       </header>
 
       <div className="proof-section-heading">
         <div>
-          <p className="eyebrow">EXECUTION BOUNDARY</p>
-          <h3>One action. Five explicit trust transitions.</h3>
+          <p className="eyebrow">FROM GOAL TO SAFE OUTCOME</p>
+          <h3>Five steps keep responsibility clear.</h3>
         </div>
-        <span><Fingerprint aria-hidden="true" size={15} /> policy before tool invocation</span>
+        <span><Fingerprint aria-hidden="true" size={15} /> rules run before tools</span>
       </div>
 
       <div className="architecture-rail" aria-label="SolePilot execution architecture">
@@ -177,16 +176,16 @@ export function ProofView({
       <div className="judge-proof">
         <div className="judge-proof-heading">
           <div>
-            <p className="eyebrow">JUDGE PATH</p>
-            <h3>Reproduce the core claim without credentials.</h3>
+            <p className="eyebrow">COMPLETE EXAMPLE</p>
+            <h3>See control happen, not just a promise.</h3>
           </div>
-          <strong>{receiptCount} receipts in the active mission</strong>
+          <strong>{receiptCount} records in the current task</strong>
         </div>
         <ol>
-          <li><span>01</span><p><b>Run</b> the reference mission and watch routine research execute automatically.</p></li>
-          <li><span>02</span><p><b>Approve or reject</b> the paused external action at the owner boundary.</p></li>
-          <li><span>03</span><p><b>Observe</b> the over-cap action fail before the tool adapter can invoke it.</p></li>
-          <li><span>04</span><p><b>Verify</b> the hash-linked ledger and inspect each canonical receipt payload.</p></li>
+          <li><span>01</span><p><b>Start</b> a ready-made task and watch routine research complete automatically.</p></li>
+          <li><span>02</span><p><b>Decide</b> whether the AI may send the prepared external message.</p></li>
+          <li><span>03</span><p><b>See</b> an action outside the spending limit stop before any tool can run.</p></li>
+          <li><span>04</span><p><b>Check</b> the activity history and inspect the technical proof when needed.</p></li>
         </ol>
         <div className="evidence-links">
           <a href="/api/health" rel="noreferrer" target="_blank">
@@ -206,7 +205,7 @@ export function ProofView({
 
       <div className="proof-boundary-note">
         <ShieldCheck aria-hidden="true" size={17} />
-        <p><b>Honest deployment boundary.</b> Replay is deterministic and sandboxed. Online research and Telegram delivery use real server adapters. Solana payment is non-custodial and Devnet-only in this competition build.</p>
+        <p><b>Current product boundary.</b> Preview mode is sandboxed. Online research and Telegram delivery use live server connections. Solana payment is non-custodial and uses Devnet in this competition build.</p>
       </div>
     </section>
   );

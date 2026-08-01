@@ -3,8 +3,11 @@
 import {
   Activity,
   AlertTriangle,
+  ArrowLeft,
   ArrowRight,
+  Bot,
   BrainCircuit,
+  BriefcaseBusiness,
   Check,
   CheckCircle2,
   ChevronRight,
@@ -15,16 +18,16 @@ import {
   ExternalLink,
   FileCheck2,
   FileJson,
+  History,
+  Home,
   LockKeyhole,
   KeyRound,
-  LayoutDashboard,
   Play,
   Plus,
   ReceiptText,
   RotateCcw,
   Search,
   Send,
-  Settings2,
   ShieldCheck,
   Sparkles,
   TerminalSquare,
@@ -73,11 +76,10 @@ const actionIcons: Record<AgentAction["kind"], typeof Search> = {
 };
 
 const navItems: Array<{ id: View; label: string; icon: typeof Activity }> = [
-  { id: "missions", label: "Overview", icon: LayoutDashboard },
-  { id: "mission", label: "Mission", icon: Activity },
-  { id: "policies", label: "Guardrails", icon: ShieldCheck },
-  { id: "receipts", label: "Audit", icon: ReceiptText },
-  { id: "proof", label: "Proof", icon: FileCheck2 },
+  { id: "missions", label: "Work", icon: Home },
+  { id: "policies", label: "Rules", icon: ShieldCheck },
+  { id: "receipts", label: "Activity", icon: History },
+  { id: "proof", label: "System", icon: FileCheck2 },
 ];
 
 const delay = (duration: number) =>
@@ -516,7 +518,7 @@ export function MissionControl() {
     setIsRunning(false);
   }
 
-  function resetRuntime() {
+  function resetRuntime(nextView: View = "mission") {
     const nextStatuses = statusesFor(mission);
     setStatuses(nextStatuses);
     setReceipts([]);
@@ -530,7 +532,7 @@ export function MissionControl() {
     setVerification(null);
     setOwnerCode("");
     setAnnouncement("Mission reset. The policy runtime is ready.");
-    setView("mission");
+    setView(nextView);
   }
 
   function loadJudgeDemo() {
@@ -562,7 +564,7 @@ export function MissionControl() {
         policy.id === policyId ? { ...policy, enabled: !policy.enabled } : policy,
       ),
     );
-    resetRuntime();
+    resetRuntime("policies");
   }
 
   function openMission(missionId: string) {
@@ -610,18 +612,18 @@ export function MissionControl() {
 
   return (
     <div className="app-shell">
-      <aside className="sidebar" aria-label="Primary navigation">
-        <div className="brand-lockup">
-          <div className="brand-mark" aria-hidden="true">
+      <header className="app-header">
+        <button className="brand-lockup" onClick={() => setView("missions")} type="button">
+          <span className="brand-mark" aria-hidden="true">
             <img alt="" height="24" src="/solepilot-mark.svg" width="24" />
-          </div>
-          <div>
-            <p className="brand-name">SolePilot</p>
-            <p className="brand-caption">Owner control plane</p>
-          </div>
-        </div>
+          </span>
+          <span>
+            <strong className="brand-name">SolePilot</strong>
+            <small className="brand-caption">AI operations with owner control</small>
+          </span>
+        </button>
 
-        <nav className="nav-list">
+        <nav className="nav-list" aria-label="Primary navigation">
           {navItems.map((item) => {
             const Icon = item.icon;
             return (
@@ -645,53 +647,62 @@ export function MissionControl() {
           })}
         </nav>
 
-        <div className="runtime-identity">
-          <span className="status-dot" />
-          <div>
-            <p>{mission.executionMode === "online" ? "Online agent runtime" : "Replay runtime"}</p>
-            <span>{mission.executionMode === "online" ? `${runtimeHealth?.version ?? "checking"} / server tools` : mission.plannerModel}</span>
-          </div>
+        <div className="header-actions">
+          <span className="runtime-status">
+            <span className="status-dot" />
+            Protected
+          </span>
+          <button className="button primary" onClick={() => setComposerOpen(true)} type="button">
+            <Plus aria-hidden="true" size={17} />
+            New task
+          </button>
         </div>
-      </aside>
+      </header>
 
       <main className="workspace">
-        <header className="topbar">
-          <div>
-            <p className="eyebrow">
-              {view === "missions"
-                ? "SOLEPILOT / COMPANY CONTROL"
-                : view === "proof"
-                  ? "SOLEPILOT / SYSTEM PROOF"
-                  : `SOLEPILOT / ${mission.id.toUpperCase()}`}
-            </p>
-            <h1>{view === "mission"
-              ? mission.title
-              : view === "missions"
-                ? "Company overview"
-                : view === "proof"
-                  ? "System proof"
-                  : navItems.find((item) => item.id === view)?.label}</h1>
-            {view === "missions" ? (
-              <p className="page-summary">Delegate work to AI agents. SolePilot pauses spending, external messages, and commitments for your approval.</p>
-            ) : view === "mission" ? (
-              <p className="page-summary">
-                {mission.customer} · {mission.executionMode === "online" ? "Online agent" : "Safe replay"}
+        {view !== "missions" ? (
+          <header className="page-header">
+            <div className="page-heading">
+              {view === "mission" ? (
+                <button className="back-link" onClick={() => setView("missions")} type="button">
+                  <ArrowLeft aria-hidden="true" size={15} /> Back to work
+                </button>
+              ) : null}
+              <p className="eyebrow">
+                {view === "mission"
+                  ? mission.executionMode === "online" ? "LIVE TASK" : "GUIDED EXAMPLE"
+                  : view === "policies"
+                    ? "OWNER RULES"
+                    : view === "receipts"
+                      ? "ACTIVITY HISTORY"
+                      : "HOW SOLEPILOT WORKS"}
               </p>
-            ) : null}
-          </div>
-          <div className="topbar-actions">
-            {view === "missions" || view === "mission" ? (
-              <button className={`button ${view === "missions" ? "primary" : "secondary"} icon-command`} onClick={() => setComposerOpen(true)} title="New mission" type="button">
-                <Plus aria-hidden="true" size={17} />
-                <span>New mission</span>
-              </button>
-            ) : null}
-            {view !== "missions" && view !== "proof" ? (
-              <button className="button secondary icon-only" onClick={resetRuntime} title="Reset runtime" type="button">
-                <RotateCcw aria-hidden="true" size={17} />
-              </button>
-            ) : null}
-            {view === "mission" ? (
+              <h1>{view === "mission"
+                ? mission.title
+                : view === "policies"
+                  ? "Rules your AI team cannot change"
+                  : view === "receipts"
+                    ? "A record of every finished action"
+                    : "Control that sits outside the AI"}</h1>
+              {view === "mission" ? (
+                <p className="page-summary">
+                  {mission.executionMode === "online"
+                    ? `For ${mission.customer} · Due ${mission.deadline}`
+                    : `For ${mission.customer} · Safe guided preview`}
+                </p>
+              ) : view === "policies" ? (
+                <p className="page-summary">Routine work can run automatically. Money, messages, and commitments still need you.</p>
+              ) : view === "receipts" ? (
+                <p className="page-summary">See what ran, what you approved, and what SolePilot stopped.</p>
+              ) : null}
+            </div>
+            <div className="page-actions">
+              {view === "mission" ? (
+                <button className="button secondary icon-only" onClick={() => resetRuntime()} title="Reset task" type="button">
+                  <RotateCcw aria-hidden="true" size={17} />
+                </button>
+              ) : null}
+              {view === "mission" ? (
               <button
                 aria-busy={isRunning}
                 className="button primary"
@@ -701,24 +712,26 @@ export function MissionControl() {
               >
                 {isRunning ? <Clock3 aria-hidden="true" size={16} /> : <Play aria-hidden="true" size={16} />}
                 {isRunning
-                  ? "Runtime active"
+                  ? "AI team working"
                   : missionIsComplete
-                    ? "Mission complete"
+                    ? "Task complete"
                     : waitingAction
-                      ? "Approval required"
+                      ? "Decision required below"
                       : completedCount > 0
-                        ? "Continue mission"
-                        : "Run mission"}
+                        ? "Continue task"
+                        : "Start task"}
               </button>
-            ) : null}
-          </div>
-        </header>
+              ) : null}
+            </div>
+          </header>
+        ) : null}
 
         <p className="sr-only" aria-live="polite">{announcement}</p>
 
         {view === "missions" ? (
           <OverviewView
             activeMissionId={mission.id}
+            onCreate={() => setComposerOpen(true)}
             onOpen={openMission}
             onRunDemo={loadJudgeDemo}
             policies={policies}
@@ -789,12 +802,14 @@ export function MissionControl() {
 
 function OverviewView({
   activeMissionId,
+  onCreate,
   onOpen,
   onRunDemo,
   policies,
   runtimes,
 }: {
   activeMissionId: string;
+  onCreate: () => void;
   onOpen: (missionId: string) => void;
   onRunDemo: () => void;
   policies: OwnerPolicy[];
@@ -825,56 +840,93 @@ function OverviewView({
   const activePolicyCount = policies.filter((policy) => policy.enabled).length;
 
   return (
-    <section className="overview-lite">
-      <div className="overview-meta-bar" aria-label="Workspace status">
-        <span><i className="status-dot" />Runtime ready</span>
-        <span><strong>{activePolicyCount}</strong> guardrails</span>
-        <span><strong>{totals.reviews}</strong> approvals</span>
-        <span><strong>{totals.receipts}</strong> verified outcomes</span>
-        <button onClick={onRunDemo} type="button"><Play size={14} />Load sample mission</button>
+    <section className="home-view">
+      <section className="home-intro">
+        <div className="home-intro-copy">
+          <p className="eyebrow">AI OPERATIONS FOR SOLO FOUNDERS</p>
+          <h1>Give your AI team work.<br /><span>Keep the final say.</span></h1>
+          <p>
+            SolePilot researches and drafts on its own, then pauses before it sends
+            a message, spends money, or commits your company to anything.
+          </p>
+          <div className="home-actions">
+            <button className="button primary" onClick={onCreate} type="button">
+              <Plus aria-hidden="true" size={17} /> Give your team a task
+            </button>
+            <button className="button text-button" onClick={onRunDemo} type="button">
+              <Play aria-hidden="true" size={16} /> See a two-minute example
+            </button>
+          </div>
+          <div className="home-trust-line">
+            <ShieldCheck aria-hidden="true" size={16} />
+            <span>Your AI cannot approve its own external actions.</span>
+          </div>
+        </div>
+
+        <div className="control-loop" aria-label="How SolePilot works">
+          <p className="control-loop-label">How work moves</p>
+          <ol>
+            <li>
+              <span>1</span>
+              <div><strong>You set the goal</strong><small>Add a deadline and spending limit.</small></div>
+            </li>
+            <li>
+              <span>2</span>
+              <div><strong>AI handles routine work</strong><small>Research and drafts run automatically.</small></div>
+            </li>
+            <li className="control-loop-owner">
+              <span>3</span>
+              <div><strong>You approve what matters</strong><small>Messages, payments, and commitments pause.</small></div>
+            </li>
+          </ol>
+          <div className="control-loop-foot">
+            <LockKeyhole aria-hidden="true" size={15} /> Nothing consequential happens silently
+          </div>
+        </div>
+      </section>
+
+      <div className="home-status" aria-label="Workspace status">
+        <span><i className="status-dot" /> AI team ready</span>
+        <span><strong>{activePolicyCount}</strong> owner rules active</span>
+        <span><strong>{totals.completed}</strong> actions finished</span>
+        <span><strong>{totals.receipts}</strong> outcomes recorded</span>
       </div>
 
-      <section className="overview-section approval-queue">
-        <header className="overview-section-header">
-          <div>
-            <h2>Approval queue</h2>
-            <p>External actions stay paused until you decide.</p>
-          </div>
-          <span>{totals.reviews}</span>
-        </header>
+      <div className="home-workspace">
+        <section className="decision-inbox">
+          <header className="section-title-row">
+            <div>
+              <p className="section-kicker">YOUR DECISIONS</p>
+              <h2>{totals.reviews ? `${totals.reviews} action${totals.reviews === 1 ? "" : "s"} waiting` : "Nothing needs you right now"}</h2>
+            </div>
+            <span className="section-count">{totals.reviews}</span>
+          </header>
         {approvalAction && approvalRuntime ? (
-          <button className="approval-queue-row" onClick={() => onOpen(approvalRuntime.mission.id)} type="button">
+          <button className="decision-row" onClick={() => onOpen(approvalRuntime.mission.id)} type="button">
             <span className="queue-icon"><UserRoundCheck size={18} /></span>
             <span className="queue-copy">
               <strong>{approvalAction.title}</strong>
               <span>{approvalRuntime.mission.title}</span>
             </span>
-            <span className="queue-context">
-              <small>Destination</small>
-              <strong>{approvalAction.destination ?? "External service"}</strong>
-            </span>
-            <span className="queue-review">Review <ArrowRight size={14} /></span>
+            <span className="queue-review">Decide <ArrowRight size={14} /></span>
           </button>
         ) : (
-          <div className="approval-empty">
-            <CheckCircle2 size={18} />
-            <span><strong>No approvals waiting</strong> Agents can continue within their existing guardrails.</span>
+          <div className="decision-empty">
+            <span><CheckCircle2 size={20} /></span>
+            <div><strong>Your AI team can keep working</strong><p>SolePilot will bring you back when an action needs permission.</p></div>
           </div>
         )}
-      </section>
+        </section>
 
-      <section className="overview-section mission-table-section">
-        <header className="overview-section-header">
+        <section className="task-library">
+          <header className="section-title-row">
           <div>
-            <h2>Missions</h2>
-            <p>Every plan keeps its actions, decisions, and evidence together.</p>
+              <p className="section-kicker">YOUR WORK</p>
+              <h2>Tasks</h2>
           </div>
-          <span>{runtimes.length}</span>
-        </header>
-        <div className="mission-table-labels" aria-hidden="true">
-          <span>Mission</span><span>Status</span><span>Progress</span><span>Next action</span><span />
-        </div>
-        <div className="mission-table">
+            <button className="section-action" onClick={onCreate} type="button"><Plus size={15} /> New task</button>
+          </header>
+          <div className="task-list">
           {runtimes.map((runtime) => {
             const values = Object.values(runtime.statuses);
             const completed = values.filter(
@@ -893,25 +945,34 @@ function OverviewView({
             const state = waiting ? "review" : complete ? "complete" : "ready";
             return (
               <button
-                className="mission-table-row"
+                className="task-row"
                 data-active={runtime.mission.id === activeMissionId}
                 key={runtime.mission.id}
                 onClick={() => onOpen(runtime.mission.id)}
                 type="button"
               >
-                <span className="mission-table-name">
-                  <i>{runtime.mission.missionType === "payment" ? <WalletCards size={16} /> : <FileCheck2 size={16} />}</i>
-                  <span><strong>{runtime.mission.title}</strong><small>{runtime.mission.customer}</small></span>
+                <span className="task-icon">
+                  {runtime.mission.missionType === "payment" ? <WalletCards size={18} /> : <BriefcaseBusiness size={18} />}
                 </span>
-                <span className="table-status" data-state={state}><i />{waiting ? "Needs approval" : complete ? "Complete" : "Ready"}</span>
-                <span className="table-progress"><span><i style={{ width: `${progress}%` }} /></span><strong>{completed}/{runtime.mission.actions.length}</strong></span>
-                <span className="table-next">{next?.title ?? "No actions remaining"}</span>
-                <ChevronRight size={17} />
+                <span className="task-copy">
+                  <strong>{runtime.mission.title}</strong>
+                  <small>{runtime.mission.customer}</small>
+                  <span className="task-next">Next: {next?.title ?? "All actions finished"}</span>
+                </span>
+                <span className="task-state" data-state={state}>
+                  {waiting ? "Needs you" : complete ? "Complete" : completed > 0 ? "In progress" : "Ready"}
+                </span>
+                <span className="task-progress">
+                  <span><i style={{ width: `${progress}%` }} /></span>
+                  <strong>{completed} of {runtime.mission.actions.length}</strong>
+                </span>
+                <ChevronRight aria-hidden="true" size={18} />
               </button>
             );
           })}
-        </div>
-      </section>
+          </div>
+        </section>
+      </div>
     </section>
   );
 }
@@ -955,189 +1016,193 @@ function MissionView({
     ? 0
     : Math.round((completedCount / mission.actions.length) * 100);
   const stateTitle = selectedStatus === "awaiting-owner"
-    ? "Needs your approval"
+    ? "Waiting for your decision"
     : selectedStatus === "complete"
-      ? "Completed safely"
+      ? "Finished"
       : selectedStatus === "blocked"
-        ? "Blocked by a guardrail"
+        ? "Stopped by your rules"
         : selectedStatus === "running"
-          ? "Running now"
+          ? "Working now"
           : selectedEvaluation.decision === "allow"
-            ? "Ready to run"
+            ? "Can run automatically"
             : selectedEvaluation.decision === "review"
-              ? "Will pause for approval"
-              : "Will be blocked";
+              ? "Will ask you first"
+              : "Your rules will stop this";
+
+  const waitingAmount = waitingAction?.kind === "payment"
+    ? `${waitingAction.amount ?? 0} ${waitingAction.asset ?? "SOL"}`
+    : waitingAction?.amountUsd
+      ? `$${waitingAction.amountUsd}`
+      : null;
 
   return (
-    <div className="mission-layout">
-      <section className="mission-main" aria-label="Mission workflow">
-        <div className="mission-summary">
-          <div className="mission-summary-heading">
-            <div>
-              <p className="mission-summary-label">Objective</p>
-              <h2>{mission.objective}</h2>
-            </div>
-            <span className="guardrail-status">
-              <ShieldCheck aria-hidden="true" size={15} />
-              {activePolicies} guardrails active
-            </span>
-          </div>
-          <div className="mission-summary-footer">
-            <div className="mission-progress-row">
-              <div className="progress-track" aria-label={`${missionProgress}% complete`}>
-                <span style={{ width: `${missionProgress}%` }} />
-              </div>
-              <strong>{completedCount}/{mission.actions.length}</strong>
-            </div>
-            <div className="mission-meta-line">
-              <span>{mission.payment ? `${mission.payment.maxAmount} ${mission.payment.asset} limit` : `$${mission.budgetCapUsd} budget limit`}</span>
-              <span>{mission.executionMode === "online" ? "Online agent" : "Safe replay"}</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="section-heading compact-heading">
-          <div>
-            <h2>Execution plan</h2>
-            <p>Every action is checked before its tool can run.</p>
-          </div>
-        </div>
-
-        <div className="action-list">
-          {mission.actions.map((action, index) => (
-            <ActionRow
-              action={action}
-              decision={evaluations[action.id].decision}
-              index={index}
-              isSelected={selectedAction.id === action.id}
-              key={action.id}
-              onSelect={onSelect}
-              status={statuses[action.id]}
-            />
-          ))}
-        </div>
-
-        <RuntimeTrace events={events} />
-      </section>
-
-      <aside className="inspector" aria-label="Action details">
-        <div className="inspector-header">
-          <div>
-            <p className="eyebrow">ACTION DETAILS</p>
-            <h2>{selectedAction.title}</h2>
-          </div>
-          <RuntimeBadge decision={selectedEvaluation.decision} status={selectedStatus} />
-        </div>
-
-        <div className="inspector-section">
-          <p className="action-agent">{selectedAction.agent}</p>
-          <p>{selectedAction.description}</p>
-        </div>
-
-        <dl className="detail-list essential-details">
-          <div><dt>Destination</dt><dd>{selectedAction.destination ?? "Owner workspace"}</dd></div>
-          <div>
-            <dt>{selectedAction.kind === "payment" ? "Payment" : "Spend"}</dt>
-            <dd>{selectedAction.kind === "payment"
-              ? `${selectedAction.amount ?? 0} ${selectedAction.asset ?? "SOL"}`
-              : selectedAction.amountUsd ? `$${selectedAction.amountUsd}` : "$0"}</dd>
-          </div>
-        </dl>
-
-        <div className="rule-result" data-decision={selectedEvaluation.decision}>
-          <LockKeyhole aria-hidden="true" size={18} />
-          <div>
-            <strong>{stateTitle}</strong>
-            <p>{selectedEvaluation.reasons[0]}</p>
-          </div>
-        </div>
-
-        {waitingAction?.id === selectedAction.id ? (
-          <div className="approval-actions">
-            <p>Review the destination and amount above, then decide whether this action may continue.</p>
-            {mission.executionMode === "online" && selectedAction.toolName === "outbox.send" ? (
+    <div className="task-detail">
+      {waitingAction ? (
+        <section className="decision-banner" aria-labelledby="decision-title">
+          <div className="decision-banner-icon"><UserRoundCheck aria-hidden="true" size={22} /></div>
+          <div className="decision-banner-copy">
+            <p className="section-kicker">YOUR DECISION</p>
+            <h2 id="decision-title">Should the AI team {waitingAction.title.toLowerCase()}?</h2>
+            <p>SolePilot paused before this action. Nothing has been sent, purchased, or committed yet.</p>
+            <dl>
+              <div><dt>Destination</dt><dd>{waitingAction.destination ?? "External service"}</dd></div>
+              {waitingAmount ? <div><dt>Amount</dt><dd>{waitingAmount}</dd></div> : null}
+              <div><dt>Reason</dt><dd>{evaluations[waitingAction.id].reasons[0]}</dd></div>
+            </dl>
+            {mission.executionMode === "online" && waitingAction.toolName === "outbox.send" ? (
               <label className="owner-code-field">
-                <span><KeyRound size={13} /> Owner connector code</span>
+                <span><KeyRound size={13} /> Confirmation code</span>
                 <input
                   autoComplete="one-time-code"
                   onChange={(event) => onOwnerCodeChange(event.target.value)}
-                  placeholder={runtimeHealth?.telegram ? "Required for live delivery" : "Connector not configured"}
+                  placeholder={runtimeHealth?.telegram ? "Enter your one-time owner code" : "Live delivery is not configured"}
                   type="password"
                   value={ownerCode}
                 />
-                <small>The code releases this one approved delivery and is never stored.</small>
+                <small>This code authorizes only this delivery and is never stored.</small>
               </label>
             ) : null}
+          </div>
+          <div className="decision-banner-actions">
+            <button
+              className="button approve"
+              disabled={mission.executionMode === "online" && waitingAction.toolName === "outbox.send" && (!runtimeHealth?.telegram || !ownerCode)}
+              onClick={() => onResolveReview(waitingAction.id, "approve")}
+              type="button"
+            >
+              <Check aria-hidden="true" size={16} />
+              {waitingAction.kind === "payment" ? "Approve payment" : "Approve action"}
+            </button>
+            <button className="button reject" onClick={() => onResolveReview(waitingAction.id, "reject")} type="button">
+              <X aria-hidden="true" size={16} /> Reject
+            </button>
+          </div>
+        </section>
+      ) : null}
+
+      <section className="task-summary" aria-label="Task summary">
+        <div>
+          <p className="section-kicker">GOAL</p>
+          <h2>{mission.objective}</h2>
+        </div>
+        <div className="task-summary-progress">
+          <div>
+            <span>Progress</span>
+            <strong>{missionProgress}%</strong>
+          </div>
+          <div className="progress-track" aria-label={`${missionProgress}% complete`}>
+            <span style={{ width: `${missionProgress}%` }} />
+          </div>
+        </div>
+        <dl>
+          <div><dt>Spending limit</dt><dd>{mission.payment ? `${mission.payment.maxAmount} ${mission.payment.asset}` : `$${mission.budgetCapUsd}`}</dd></div>
+          <div><dt>Run mode</dt><dd>{mission.executionMode === "online" ? "Live tools" : "Guided example"}</dd></div>
+          <div><dt>Owner rules</dt><dd>{activePolicies} active</dd></div>
+        </dl>
+      </section>
+
+      <div className="task-workspace">
+        <section className="workflow-panel" aria-label="AI work plan">
+          <header className="section-title-row">
             <div>
-              <button
-                className="button approve"
-                disabled={mission.executionMode === "online" && selectedAction.toolName === "outbox.send" && (!runtimeHealth?.telegram || !ownerCode)}
-                onClick={() => onResolveReview(selectedAction.id, "approve")}
-                type="button"
-              >
-                <Check aria-hidden="true" size={16} />
-                {selectedAction.kind === "payment" ? "Approve & pay" : "Approve & continue"}
-              </button>
-              <button className="button reject" onClick={() => onResolveReview(selectedAction.id, "reject")} type="button">
-                <X aria-hidden="true" size={16} />Reject
-              </button>
+              <p className="section-kicker">WORK PLAN</p>
+              <h2>What your AI team will do</h2>
             </div>
+            <span className="steps-finished">{completedCount} of {mission.actions.length} finished</span>
+          </header>
+          <div className="action-list">
+            {mission.actions.map((action, index) => (
+              <ActionRow
+                action={action}
+                decision={evaluations[action.id].decision}
+                index={index}
+                isSelected={selectedAction.id === action.id}
+                key={action.id}
+                onSelect={onSelect}
+                status={statuses[action.id]}
+              />
+            ))}
           </div>
-        ) : null}
+          <RuntimeTrace events={events} />
+        </section>
 
-        <details className="technical-details">
-          <summary>Technical details</summary>
-          <dl className="detail-list">
-            <div><dt>Tool</dt><dd><code>{selectedAction.toolName}</code></dd></div>
-            {selectedAction.scheme ? <div><dt>Scheme</dt><dd>{selectedAction.scheme}</dd></div> : null}
-            <div><dt>Authority</dt><dd>{decisionLabel(selectedEvaluation.decision)}</dd></div>
-            {selectedAction.network ? <div><dt>Network</dt><dd>{selectedAction.network}</dd></div> : null}
-            {selectedAction.resource ? <div><dt>Resource</dt><dd>{selectedAction.resource}</dd></div> : null}
-            {selectedAction.requirements ? <div><dt>Requirements</dt><dd>{selectedAction.requirements}</dd></div> : null}
-            <div><dt>Guardrail</dt><dd><code>{selectedEvaluation.matchedPolicyIds[0] ?? "default"}</code></dd></div>
-          </dl>
-          <div className="capability-note">
-            <KeyRound size={14} />
-            Approval creates a one-time capability bound to this mission and action for five minutes.
+        <aside className="action-panel" aria-label="Selected step">
+          <header>
+            <div>
+              <p className="section-kicker">SELECTED STEP</p>
+              <h2>{selectedAction.title}</h2>
+            </div>
+            <RuntimeBadge decision={selectedEvaluation.decision} status={selectedStatus} />
+          </header>
+
+          <p className="action-description">{selectedAction.description}</p>
+
+          <div className="permission-callout" data-decision={selectedEvaluation.decision}>
+            <LockKeyhole aria-hidden="true" size={18} />
+            <div><strong>{stateTitle}</strong><p>{selectedEvaluation.reasons[0]}</p></div>
           </div>
-        </details>
 
-        {selectedArtifact ? (
-          <details className="artifact-result">
-            <summary className="artifact-heading">
-              <span><TerminalSquare size={14} /> View result</span>
-              <code>{selectedArtifact.provider}</code>
-            </summary>
-            <p>{selectedArtifact.summary}</p>
-            <pre>{selectedArtifact.content}</pre>
-            {selectedArtifact.externalReference ? (
-              <div className="artifact-proof">
-                <span><Cloud size={13} /> Provider reference</span>
-                {selectedArtifact.externalReference.startsWith("http") ? (
-                  <a href={selectedArtifact.externalReference} rel="noreferrer" target="_blank">
-                    Open evidence <ExternalLink size={12} />
-                  </a>
-                ) : <code>{selectedArtifact.externalReference}</code>}
-              </div>
-            ) : null}
-            {selectedArtifact.evidence?.length ? (
-              <div className="evidence-list">
-                {selectedArtifact.evidence.map((item) => (
-                  <a href={item.url} key={item.url} rel="noreferrer" target="_blank">
-                    <span>{item.source}</span>{item.title}<ExternalLink size={11} />
-                  </a>
-                ))}
-              </div>
-            ) : null}
-            {selectedArtifact.attestation ? (
-              <div className="artifact-attestation">
-                <ShieldCheck size={13} />
-                <code>{selectedArtifact.attestation.slice(0, 28)}...</code>
-              </div>
-            ) : null}
+          {(selectedAction.destination || selectedAction.amountUsd || selectedAction.kind === "payment") ? (
+            <dl className="action-facts">
+              {selectedAction.destination ? <div><dt>Destination</dt><dd>{selectedAction.destination}</dd></div> : null}
+              {selectedAction.kind === "payment" ? (
+                <div><dt>Amount</dt><dd>{selectedAction.amount ?? 0} {selectedAction.asset ?? "SOL"}</dd></div>
+              ) : selectedAction.amountUsd ? <div><dt>Amount</dt><dd>${selectedAction.amountUsd}</dd></div> : null}
+            </dl>
+          ) : null}
+
+          {selectedArtifact ? (
+            <details className="result-card" open>
+              <summary><CheckCircle2 size={15} /> Result ready</summary>
+              <p>{selectedArtifact.summary}</p>
+              <pre>{selectedArtifact.content}</pre>
+              {selectedArtifact.externalReference ? (
+                <div className="artifact-proof">
+                  <span><Cloud size={13} /> Evidence</span>
+                  {selectedArtifact.externalReference.startsWith("http") ? (
+                    <a href={selectedArtifact.externalReference} rel="noreferrer" target="_blank">
+                      Open source <ExternalLink size={12} />
+                    </a>
+                  ) : <code>{selectedArtifact.externalReference}</code>}
+                </div>
+              ) : null}
+              {selectedArtifact.evidence?.length ? (
+                <div className="evidence-list">
+                  {selectedArtifact.evidence.map((item) => (
+                    <a href={item.url} key={item.url} rel="noreferrer" target="_blank">
+                      <span>{item.source}</span>{item.title}<ExternalLink size={11} />
+                    </a>
+                  ))}
+                </div>
+              ) : null}
+            </details>
+          ) : (
+            <div className="result-empty">
+              <Bot size={18} />
+              <span>
+                {selectedStatus === "awaiting-owner"
+                  ? "This step is paused until you approve or reject it above."
+                  : selectedStatus === "blocked"
+                    ? "This step was stopped before a connected tool could run."
+                    : selectedStatus === "running"
+                      ? "Your AI team is working on this step now."
+                      : <>Select <b>Start task</b> to begin this work.</>}
+              </span>
+            </div>
+          )}
+
+          <details className="technical-details">
+            <summary>Technical details</summary>
+            <dl className="detail-list">
+              <div><dt>Agent</dt><dd>{selectedAction.agent}</dd></div>
+              <div><dt>Tool</dt><dd><code>{selectedAction.toolName}</code></dd></div>
+              <div><dt>Policy result</dt><dd>{decisionLabel(selectedEvaluation.decision)}</dd></div>
+              {selectedAction.network ? <div><dt>Network</dt><dd>{selectedAction.network}</dd></div> : null}
+              <div><dt>Rule</dt><dd><code>{selectedEvaluation.matchedPolicyIds[0] ?? "default"}</code></dd></div>
+            </dl>
           </details>
-        ) : null}
-      </aside>
+        </aside>
+      </div>
     </div>
   );
 }
@@ -1153,11 +1218,11 @@ function ActionRow({ action, decision, index, isSelected, onSelect, status }: {
   const Icon = actionIcons[action.kind];
   return (
     <button className="action-row" data-selected={isSelected} onClick={() => onSelect(action.id)} type="button">
-      <span className="step-index">{String(index + 1).padStart(2, "0")}</span>
-      <span className="action-icon"><Icon aria-hidden="true" size={17} /></span>
+      <span className="step-index">{status === "complete" ? <Check size={14} /> : status === "blocked" ? <X size={14} /> : index + 1}</span>
+      <span className="action-icon"><Icon aria-hidden="true" size={18} /></span>
       <span className="action-copy">
         <strong>{action.title}</strong>
-        <span>{action.agent} · <code>{action.toolName}</code></span>
+        <span>{action.description}</span>
       </span>
       <RuntimeBadge decision={decision} status={status} />
       <ChevronRight aria-hidden="true" className="row-chevron" size={17} />
@@ -1166,11 +1231,13 @@ function ActionRow({ action, decision, index, isSelected, onSelect, status }: {
 }
 
 function RuntimeBadge({ decision, status }: { decision: Decision; status: RuntimeStatus }) {
-  if (status === "complete") return <span className="runtime-badge complete"><Check size={13} />Complete</span>;
-  if (status === "blocked") return <span className="runtime-badge blocked"><X size={13} />Blocked</span>;
-  if (status === "running") return <span className="runtime-badge running"><Clock3 size={13} />Running</span>;
-  if (status === "awaiting-owner") return <span className="runtime-badge review"><UserRoundCheck size={13} />Review</span>;
-  return <span className={`runtime-badge ${decision}`}><Circle size={10} />{decisionLabel(decision)}</span>;
+  if (status === "complete") return <span className="runtime-badge complete"><Check size={13} />Done</span>;
+  if (status === "blocked") return <span className="runtime-badge blocked"><X size={13} />Stopped</span>;
+  if (status === "running") return <span className="runtime-badge running"><Clock3 size={13} />Working</span>;
+  if (status === "awaiting-owner") return <span className="runtime-badge review"><UserRoundCheck size={13} />Needs you</span>;
+  if (decision === "allow") return <span className="runtime-badge allow"><Circle size={9} />Automatic</span>;
+  if (decision === "review") return <span className="runtime-badge review"><Circle size={9} />Asks first</span>;
+  return <span className="runtime-badge block"><Circle size={9} />Will stop</span>;
 }
 
 function RuntimeTrace({ events }: { events: RuntimeEvent[] }) {
@@ -1178,7 +1245,7 @@ function RuntimeTrace({ events }: { events: RuntimeEvent[] }) {
   return (
     <details className="runtime-trace">
       <summary className="trace-heading">
-        <span><Activity size={14} /> Activity log</span>
+        <span><Activity size={14} /> View technical activity</span>
         <code>{events.length} {events.length === 1 ? "event" : "events"}</code>
       </summary>
       {visible.length === 0 ? <p className="trace-empty">No runtime events.</p> : (
@@ -1199,16 +1266,20 @@ function RuntimeTrace({ events }: { events: RuntimeEvent[] }) {
 
 function PoliciesView({ policies, onToggle }: { policies: OwnerPolicy[]; onToggle: (policyId: string) => void }) {
   return (
-    <section className="content-view narrow-view">
-      <div className="view-intro">
-        <h2>Decide what agents can do</h2>
-        <p>These guardrails run before any external action. Switch one off to test a different authority boundary.</p>
+    <section className="settings-view">
+      <div className="rules-explainer">
+        <div><Bot size={19} /><span><strong>AI can propose</strong><small>Research, drafts, messages, and payments</small></span></div>
+        <ArrowRight size={17} />
+        <div><ShieldCheck size={19} /><span><strong>Your rules decide</strong><small>Run automatically, ask you, or stop</small></span></div>
+        <ArrowRight size={17} />
+        <div><UserRoundCheck size={19} /><span><strong>You keep control</strong><small>The AI cannot change these rules</small></span></div>
       </div>
       <div className="policy-list">
-        {policies.map((policy) => (
+        {policies.map((policy, index) => (
           <div className="policy-row" key={policy.id}>
-            <div className="policy-icon"><Settings2 aria-hidden="true" size={18} /></div>
-            <div><h3>{policy.name}</h3><p>{policy.description}</p><code>{policy.id}</code></div>
+            <div className="policy-number">{index + 1}</div>
+            <div><h3>{policy.name}</h3><p>{policy.description}</p></div>
+            <span className="policy-state">{policy.enabled ? "Active" : "Off"}</span>
             <button
               aria-checked={policy.enabled}
               aria-label={`${policy.enabled ? "Disable" : "Enable"} ${policy.name}`}
@@ -1259,15 +1330,15 @@ function ReceiptsView({ mission, onVerification, receipts, verification }: {
   }
 
   return (
-    <section className="content-view narrow-view receipt-view">
-      <div className="view-intro ledger-intro">
+    <section className="activity-view receipt-view">
+      <div className="activity-toolbar ledger-intro">
         <div>
-          <h2>Every outcome, verifiable</h2>
-          <p>Review or export the evidence created as your agents work.</p>
+          <h2>{mission.title}</h2>
+          <p>{receipts.length ? `${receipts.length} recorded outcome${receipts.length === 1 ? "" : "s"} for this task.` : "Run this task to create its first activity record."}</p>
         </div>
         <div className="ledger-actions">
           <button className="button secondary" disabled={receipts.length === 0} onClick={verify} type="button">
-            <ShieldCheck size={16} />Verify chain
+            <ShieldCheck size={16} />Check records
           </button>
           <button className="button secondary icon-only" disabled={receipts.length === 0} onClick={exportLedger} title="Export JSON ledger" type="button">
             <Download size={16} />
@@ -1286,7 +1357,7 @@ function ReceiptsView({ mission, onVerification, receipts, verification }: {
         <div className="empty-state">
           <ReceiptText aria-hidden="true" size={28} />
           <h3>No receipts yet</h3>
-          <p>Run the mission to commit the first policy outcome.</p>
+          <p>Finished, approved, rejected, and stopped actions will appear here.</p>
         </div>
       ) : (
         <div className="receipt-list">
@@ -1297,10 +1368,10 @@ function ReceiptsView({ mission, onVerification, receipts, verification }: {
                 <div>
                   <p>{receipt.resultLabel}</p>
                   <code>{receipt.id}</code>
-                  <span className="receipt-link">prev: {receipt.previousReceiptId ?? "GENESIS"}</span>
+                  <span className="receipt-link">Step {receipt.actionId}</span>
                 </div>
                 <div className="receipt-meta">
-                  <span>{receipt.artifactDigest ? "ARTIFACT SEALED" : "NO TOOL OUTPUT"}</span>
+                  <span>{receipt.artifactDigest ? "RESULT RECORDED" : "NO EXTERNAL RESULT"}</span>
                   {receipt.approvalCapabilityId ? (
                     <code>{receipt.approvalCapabilityId}</code>
                   ) : null}
@@ -1346,8 +1417,17 @@ function MissionComposer({ initialDraft, initialMode, onClose, onCreate }: {
   onClose: () => void;
   onCreate: (draft: MissionDraft, mode: PlannerMode, signal: AbortSignal) => Promise<void>;
 }) {
-  const [draft, setDraft] = useState(initialDraft);
+  const fallbackDeadline = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
+  const [draft, setDraft] = useState({
+    ...initialDraft,
+    deadline: Date.parse(`${initialDraft.deadline}T23:59:59`) > Date.now()
+      ? initialDraft.deadline
+      : fallbackDeadline,
+  });
   const [mode, setMode] = useState(initialMode);
+  const [step, setStep] = useState(1);
   const [isPlanning, setIsPlanning] = useState(false);
   const [error, setError] = useState("");
   const abortController = useRef(new AbortController());
@@ -1377,9 +1457,49 @@ function MissionComposer({ initialDraft, initialMode, onClose, onCreate }: {
     onClose();
   }
 
-  async function submit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape" && !isPlanning) {
+        abortController.current.abort();
+        onClose();
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [isPlanning, onClose]);
+
+  function continueToNextStep() {
     setError("");
+    if (step === 2 && draft.missionType === "work" && (!draft.objective.trim() || !draft.customer.trim())) {
+      setError("Describe the task and who it is for before continuing.");
+      return;
+    }
+    if (
+      step === 2 &&
+      draft.missionType === "payment" &&
+      (!payment.payeeName.trim() || !payment.payTo.trim() || !payment.purpose.trim() || payment.amount <= 0)
+    ) {
+      setError("Add the payee, recipient, amount, and purpose before continuing.");
+      return;
+    }
+    setStep((current) => Math.min(3, current + 1));
+  }
+
+  async function submit() {
+    setError("");
+    if (step < 3) return;
+    if (!draft.deadline || Date.parse(`${draft.deadline}T23:59:59`) < Date.now()) {
+      setError("Choose a deadline that has not passed.");
+      return;
+    }
+    if (draft.missionType === "work" && draft.budgetCapUsd <= 0) {
+      setError("Maximum spend must be greater than zero.");
+      return;
+    }
+    if (draft.missionType === "payment" && payment.maxAmount <= 0) {
+      setError("Maximum authorized amount must be greater than zero.");
+      return;
+    }
     if (draft.missionType === "payment" && payment.amount > payment.maxAmount) {
       setError("Payment amount cannot exceed the maximum authorized amount.");
       return;
@@ -1399,123 +1519,153 @@ function MissionComposer({ initialDraft, initialMode, onClose, onCreate }: {
       <section aria-labelledby="composer-title" aria-modal="true" className="mission-composer" role="dialog">
         <header className="composer-header">
           <div>
-            <p className="eyebrow">NEW GOVERNED RUNTIME</p>
-            <h2 id="composer-title">Create a mission</h2>
+            <p className="eyebrow">NEW TASK · STEP {step} OF 3</p>
+            <h2 id="composer-title">
+              {step === 1 ? "What kind of work is this?" : step === 2 ? "What should your AI team do?" : "Where should it stop and ask?"}
+            </h2>
           </div>
-          <button className="button secondary icon-only" onClick={close} title="Close" type="button"><X size={17} /></button>
+          <button aria-label="Close task setup" className="button secondary icon-only" onClick={close} title="Close" type="button"><X size={17} /></button>
         </header>
 
-        <form onSubmit={submit}>
-          <fieldset className="planner-choice mission-type-choice">
-            <legend>Mission type</legend>
-            <button data-active={draft.missionType === "work"} onClick={() => selectMissionType("work")} type="button">
-              <FileCheck2 size={17} /><span><strong>Work mission</strong><small>Research, create, and deliver</small></span>
-            </button>
-            <button data-active={draft.missionType === "payment"} onClick={() => selectMissionType("payment")} type="button">
-              <WalletCards size={17} /><span><strong>Payment mission</strong><small>Check, approve, and pay</small></span>
-            </button>
-          </fieldset>
+        <div className="composer-progress" aria-label={`Step ${step} of 3`}>
+          {[1, 2, 3].map((value) => <span aria-current={step === value ? "step" : undefined} data-complete={step > value} key={value} />)}
+        </div>
 
-          {draft.missionType === "payment" ? (
-            <>
+        <div className="composer-form">
+          {step === 1 ? (
+            <fieldset className="task-type-choice">
+              <legend>Choose the closest match</legend>
+              <button data-active={draft.missionType === "work"} onClick={() => selectMissionType("work")} type="button">
+                <span className="choice-icon"><BriefcaseBusiness size={22} /></span>
+                <span><strong>Delegate business work</strong><small>Research, plan, draft, and deliver something for you.</small></span>
+                <CheckCircle2 size={18} />
+              </button>
+              <button data-active={draft.missionType === "payment"} onClick={() => selectMissionType("payment")} type="button">
+                <span className="choice-icon"><WalletCards size={22} /></span>
+                <span><strong>Prepare a payment</strong><small>Check an instruction, ask for approval, then hand it to your wallet.</small></span>
+                <CheckCircle2 size={18} />
+              </button>
+              <div className="choice-note"><ShieldCheck size={16} /> Both paths apply your owner rules before an external action can run.</div>
+            </fieldset>
+          ) : null}
+
+          {step === 2 && draft.missionType === "work" ? (
+            <div className="composer-step">
+              <label className="form-field objective-field">
+                <span>Describe the outcome you want</span>
+                <textarea
+                  autoFocus
+                  maxLength={500}
+                  onChange={(event) => setDraft((current) => ({ ...current, objective: event.target.value }))}
+                  placeholder="Example: Research three payment providers, recommend one, and draft an outreach email."
+                  value={draft.objective}
+                />
+              </label>
+              <div className="example-prompts" aria-label="Example tasks">
+                <span>Try an example</span>
+                <button onClick={() => setDraft((current) => ({ ...current, objective: "Research three agent payment providers, compare their pricing and risks, and prepare a recommendation.", customer: "My company" }))} type="button">Compare vendors</button>
+                <button onClick={() => setDraft((current) => ({ ...current, objective: "Research a qualified prospect, draft a scoped proposal, and prepare it for my approval before sending.", customer: "Prospective customer" }))} type="button">Prepare a proposal</button>
+                <button onClick={() => setDraft((current) => ({ ...current, objective: "Research this week's market developments and draft a concise update for my community.", customer: "Community" }))} type="button">Draft an update</button>
+              </div>
+              <label className="form-field">
+                <span>Who is this work for?</span>
+                <input autoComplete="organization" onChange={(event) => setDraft((current) => ({ ...current, customer: event.target.value }))} placeholder="Customer, partner, or your own company" value={draft.customer} />
+              </label>
+            </div>
+          ) : null}
+
+          {step === 2 && draft.missionType === "payment" ? (
+            <div className="composer-step">
               <div className="payment-notice">
                 <ShieldCheck size={17} />
-                <div><strong>Owner-signed payment</strong><span>SolePilot checks the intent; your wallet signs the exact transfer.</span></div>
+                <div><strong>Your wallet stays in control</strong><span>SolePilot checks the instruction and pauses for approval. Your wallet signs the exact transfer.</span></div>
               </div>
               <div className="form-grid payment-grid">
                 <label className="form-field">
-                  <span>Payee name</span>
-                  <input onChange={(event) => updatePayment({ payeeName: event.target.value })} placeholder="Acme API Services" required value={payment.payeeName} />
-                </label>
-                <label className="form-field">
-                  <span>Payment route</span>
-                  <input readOnly value={`${payment.scheme} · ${payment.network}`} />
-                </label>
-                <label className="form-field payment-address-field">
-                  <span>Recipient address</span>
-                  <input autoCapitalize="off" autoCorrect="off" onChange={(event) => updatePayment({ payTo: event.target.value.trim() })} placeholder="Solana recipient address" required spellCheck={false} value={payment.payTo} />
+                  <span>Who are you paying?</span>
+                  <input autoComplete="organization" onChange={(event) => updatePayment({ payeeName: event.target.value })} placeholder="Vendor or service name" value={payment.payeeName} />
                 </label>
                 <label className="form-field">
                   <span>Amount ({payment.asset})</span>
-                  <input max={payment.maxAmount} min="0.000001" onChange={(event) => updatePayment({ amount: Number(event.target.value) })} required step="0.000001" type="number" value={payment.amount} />
+                  <input min="0.000001" onChange={(event) => updatePayment({ amount: Number(event.target.value) })} step="0.000001" type="number" value={payment.amount} />
                 </label>
-                <label className="form-field">
-                  <span>Maximum authorized ({payment.asset})</span>
-                  <input min="0.000001" onChange={(event) => updatePayment({ maxAmount: Number(event.target.value) })} required step="0.000001" type="number" value={payment.maxAmount} />
-                </label>
-                <label className="form-field">
-                  <span>Payment deadline</span>
-                  <input onChange={(event) => setDraft((current) => ({ ...current, deadline: event.target.value }))} required type="date" value={draft.deadline} />
+                <label className="form-field payment-address-field">
+                  <span>Recipient address</span>
+                  <input autoCapitalize="off" autoCorrect="off" onChange={(event) => updatePayment({ payTo: event.target.value.trim() })} placeholder="Solana recipient address" spellCheck={false} value={payment.payTo} />
                 </label>
               </div>
               <label className="form-field objective-field">
-                <span>Payment purpose</span>
-                <textarea maxLength={500} onChange={(event) => updatePayment({ purpose: event.target.value })} required value={payment.purpose} />
+                <span>What is this payment for?</span>
+                <textarea maxLength={500} onChange={(event) => updatePayment({ purpose: event.target.value })} value={payment.purpose} />
               </label>
-              <details className="advanced-settings">
-                <summary>More settings</summary>
-                <label className="form-field objective-field">
-                  <span>Execution requirements</span>
-                  <textarea maxLength={500} onChange={(event) => updatePayment({ requirements: event.target.value })} required value={payment.requirements} />
-                </label>
-              </details>
-            </>
-          ) : (
-            <>
-              <label className="form-field objective-field">
-                <span>Objective</span>
-                <textarea maxLength={500} onChange={(event) => setDraft((current) => ({ ...current, objective: event.target.value }))} required value={draft.objective} />
-              </label>
-              <div className="form-grid">
-                <label className="form-field">
-                  <span>Stakeholder</span>
-                  <input onChange={(event) => setDraft((current) => ({ ...current, customer: event.target.value }))} required value={draft.customer} />
-                </label>
-                <label className="form-field">
-                  <span>Deadline</span>
-                  <input onChange={(event) => setDraft((current) => ({ ...current, deadline: event.target.value }))} required type="date" value={draft.deadline} />
-                </label>
-                <label className="form-field">
-                  <span>Budget cap (USD)</span>
-                  <input min="1" onChange={(event) => setDraft((current) => ({ ...current, budgetCapUsd: Number(event.target.value) }))} required type="number" value={draft.budgetCapUsd} />
-                </label>
-              </div>
-              <details className="advanced-settings">
-                <summary>More settings</summary>
-                <label className="form-field">
-                  <span>Source</span>
-                  <input onChange={(event) => setDraft((current) => ({ ...current, source: event.target.value }))} required value={draft.source} />
-                </label>
-              </details>
-            </>
-          )}
+            </div>
+          ) : null}
 
-          <fieldset className="planner-choice">
-            <legend>Planner</legend>
-            <button data-active={mode === "replay"} disabled={draft.missionType === "payment"} onClick={() => setMode("replay")} type="button">
-              <FileJson size={17} /><span><strong>Guided demo</strong><small>No setup required</small></span>
-            </button>
-            <button data-active={mode === "live-ai"} onClick={() => setMode("live-ai")} type="button">
-              <BrainCircuit size={17} /><span><strong>Live agent</strong><small>{draft.missionType === "payment" ? "Wallet-signed transfer" : "Plan and execute online"}</small></span>
-            </button>
-          </fieldset>
+          {step === 3 ? (
+            <div className="composer-step">
+              <div className="boundary-heading">
+                <LockKeyhole size={19} />
+                <div><strong>Set the boundaries</strong><p>SolePilot will stop or ask you before the AI crosses them.</p></div>
+              </div>
+              <div className="form-grid">
+                {draft.missionType === "work" ? (
+                  <label className="form-field">
+                    <span>Maximum spend (USD)</span>
+                    <input min="1" onChange={(event) => setDraft((current) => ({ ...current, budgetCapUsd: Number(event.target.value) }))} type="number" value={draft.budgetCapUsd} />
+                  </label>
+                ) : (
+                  <label className="form-field">
+                    <span>Maximum authorized ({payment.asset})</span>
+                    <input min="0.000001" onChange={(event) => updatePayment({ maxAmount: Number(event.target.value) })} step="0.000001" type="number" value={payment.maxAmount} />
+                  </label>
+                )}
+                <label className="form-field">
+                  <span>Finish by</span>
+                  <input min={new Date().toISOString().slice(0, 10)} onChange={(event) => setDraft((current) => ({ ...current, deadline: event.target.value }))} type="date" value={draft.deadline} />
+                </label>
+              </div>
+              {draft.missionType === "payment" ? (
+                <label className="form-field objective-field">
+                  <span>Conditions the payment must match</span>
+                  <textarea maxLength={500} onChange={(event) => updatePayment({ requirements: event.target.value })} value={payment.requirements} />
+                </label>
+              ) : (
+                <label className="form-field">
+                  <span>Starting information</span>
+                  <input onChange={(event) => setDraft((current) => ({ ...current, source: event.target.value }))} placeholder="Brief, website, or notes" value={draft.source} />
+                </label>
+              )}
+
+              <fieldset className="run-mode-choice">
+                <legend>How should this run?</legend>
+                <button data-active={mode === "replay"} disabled={draft.missionType === "payment"} onClick={() => setMode("replay")} type="button">
+                  <FileJson size={17} /><span><strong>Preview safely</strong><small>Use sample tools. No setup required.</small></span>
+                </button>
+                <button data-active={mode === "live-ai"} onClick={() => setMode("live-ai")} type="button">
+                  <BrainCircuit size={17} /><span><strong>Use live tools</strong><small>{draft.missionType === "payment" ? "Prepare a wallet-signed transfer" : "Research online and create real outputs"}</small></span>
+                </button>
+              </fieldset>
+            </div>
+          ) : null}
 
           {error ? <div className="composer-error"><AlertTriangle size={16} />{error}</div> : null}
 
           <footer className="composer-footer">
-            <button className="button secondary" onClick={close} type="button">Cancel</button>
-            <button className="button primary create-plan" disabled={isPlanning} type="submit">
-              {isPlanning ? <Clock3 size={16} /> : mode === "live-ai" ? <Sparkles size={16} /> : <Play size={16} />}
-              {isPlanning
-                ? "Planning on server"
-                : draft.missionType === "payment"
-                  ? "Create payment mission"
-                  : mode === "live-ai"
-                    ? "Launch online agent"
-                    : "Create replay plan"}
+            <button className="button secondary" onClick={step === 1 ? close : () => { setError(""); setStep((current) => Math.max(1, current - 1)); }} type="button">
+              {step === 1 ? "Cancel" : "Back"}
             </button>
+            {step < 3 ? (
+              <button className="button primary create-plan" onClick={continueToNextStep} type="button">
+                Continue <ArrowRight size={16} />
+              </button>
+            ) : (
+              <button className="button primary create-plan" disabled={isPlanning} onClick={submit} type="button">
+                {isPlanning ? <Clock3 size={16} /> : mode === "live-ai" ? <Sparkles size={16} /> : <Play size={16} />}
+                {isPlanning ? "Building your plan" : draft.missionType === "payment" ? "Review payment plan" : "Create task"}
+              </button>
+            )}
           </footer>
-        </form>
+        </div>
       </section>
     </div>
   );

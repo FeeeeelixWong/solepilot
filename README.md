@@ -4,12 +4,11 @@
 
 <h1 align="center">SolePilot</h1>
 
-<p align="center"><strong>Let agents operate. Never let them grant themselves authority.</strong></p>
+<p align="center"><strong>Give your AI team work. Keep the final say.</strong></p>
 
 <p align="center">
-  A governed mission control plane for one-person companies. Agent workflows
-  execute delegated work, pause at owner boundaries, fail closed on policy
-  violations, and commit every outcome to a verifiable receipt chain.
+  AI operations for solo founders. Research and drafting move automatically;
+  messages, spending, and commitments pause for the owner's decision.
 </p>
 
 <p align="center">
@@ -113,20 +112,21 @@ construction, online connector design, payment routing, limitations, and the
 production replacement plan. [SECURITY.md](./SECURITY.md) documents the threat
 model, enforced invariants, adversarial test coverage, and remaining risks.
 
-## 90-second judge path
+## Two-minute product path
 
-1. Open [the live product](https://solepilot.vercel.app) and select **Proof**.
-2. Select **Start 90-second proof**, then **Run mission**.
+1. Open [the live product](https://solepilot.vercel.app) and select **See a two-minute example**.
+2. Select **Start task** and watch routine research and drafting finish automatically.
 3. Inspect the delegated research and drafting artifacts.
 4. Approve or reject the paused external send.
 5. Continue until the over-cap reservation is blocked before invocation.
-6. Open **Ledger**, expand a receipt, and inspect its canonical payload.
-7. Select **Verify chain**.
+6. Open **Activity**, expand a record, and inspect its technical proof.
+7. Select **Check records**.
 
-Replay requires no account or API key. For a real online mission, create a new
-**Work delivery** mission and choose **Online agent**. For a wallet-dependent
-flow, create a **Governed payment** mission and inspect the exact recipient,
-amount, cap, purpose, and requirements before approving the Devnet signature.
+The guided preview requires no account or API key. For a real online task,
+select **New task**, choose **Delegate business work**, and enable **Use live
+tools** in step three. For a wallet-dependent flow, choose **Prepare a
+payment** and inspect the exact recipient, amount, limit, purpose, and
+conditions before approving the Devnet signature.
 
 ## What is implemented
 
